@@ -1,0 +1,119 @@
+# ==============================================================================
+# AI 安全评估平台 - 统一认证配置
+# ==============================================================================
+
+# --- 凭证存储配置 ---
+# 控制 credential 的持久化方式（文件 / 加密文件）
+auth:
+  store:
+    type: file                                    # 存储类型：file（本地文件）
+    path: "./examples/credentials.json"           # 凭证文件路径（相对或绝对路径）
+    encrypted: false                              # 是否启用加密（生产环境建议 true）
+    encryption:
+      enabled: false                              # 加密开关（与 encrypted 二选一即可）
+      algo: "AES-256-GCM"                         # 对称加密算法
+      kdf: "scrypt"                               # 密钥派生函数
+      kdf_params:                                 # scrypt 参数（N=CPU/内存成本, R=块大小, P=并行度）
+        n: 32768
+        r: 8
+        p: 1
+        key_len: 32                               # 派生密钥长度（字节）
+      master_key_env: "AI_SEC_EVAL_MASTER_KEY"    # 主密钥来源：环境变量名
+      # master_key_file: "/path/to/master.key"    # 主密钥来源：文件路径（二选一）
+
+# --- Provider 配置 ---
+# 每个 provider 定义一个 AI 平台接入点
+# - name:     唯一标识，用于 client.Chat(ctx, "name", req) 调用
+# - type:     对应 provider/ 下的注册名（openai / claude / gemini / ollama / openai_compat）
+# - base_url: API 基础地址（含 /v1 等路径前缀）
+# - auth_ref: 关联的凭证 ID（对应 credentials 中的 id）
+# - headers:  附加请求头（可选）
+providers:
+  # ---- 本地推理 ----
+  - name: "llama_local"                           # llama.cpp server（OpenAI 兼容）
+    type: "openai_compat"
+    base_url: "http://127.0.0.1:8080/v1"         # llama-server 默认端口
+    auth_ref: "none"                              # 本地无需认证
+
+  - name: "vllm_local"                            # vLLM（OpenAI 兼容）
+    type: "openai_compat"
+    base_url: "http://127.0.0.1:8000/v1"
+    auth_ref: "vllm_bearer"                       # 可选 bearer token
+
+  # ---- 云端 API ----
+  - name: "openai_cloud"                          # OpenAI GPT 系列
+    type: "openai"                                # 自动使用 https://api.openai.com/v1
+    auth_ref: "openai_key"
+
+  - name: "claude_cloud"                          # Anthropic Claude
+    type: "claude"                                # 自动使用 https://api.anthropic.com
+    auth_ref: "claude_key"
+
+  - name: "gemini_cloud"                          # Google Gemini
+    type: "gemini"                                # 自动使用 https://generativelanguage.googleapis.com
+    auth_ref: "gemini_key"
+
+  # ---- 更多 OpenAI 兼容平台（取消注释启用） ----
+  - name: "deepseek"
+    type: "deepseek"                            # 内置注册，默认 https://api.deepseek.com/v1
+    auth_ref: "deepseek_key"
+
+  # - name: "moonshot"
+  #   type: "moonshot"                            # 内置注册，默认 https://api.moonshot.cn/v1
+  #   auth_ref: "moonshot_key"
+  #
+  # - name: "ollama_local"
+  #   type: "ollama"                              # Ollama 原生 /api/chat 格式
+  #   base_url: "http://127.0.0.1:11434"
+  #   auth_ref: "none"
+
+# --- 凭证定义 ---
+# 每个凭证对应一组认证信息
+# - id:           唯一标识，被 provider.auth_ref 引用
+# - provider:     归属的 provider 类型（用于 Manager.Resolve 按 provider 自动选凭证）
+# - auth_type:    认证类型
+#     none          - 无认证（本地端点）
+#     bearer_token  - Authorization: Bearer <token>（OpenAI / vLLM / DeepSeek / Moonshot）
+#     api_key       - 自定义 Header（Claude 用 x-api-key，Gemini 用 x-goog-api-key）
+#     oauth         - OAuth2 access_token + refresh_token（支持 401 自动刷新）
+#     jwt_sign      - HMAC-SHA256 签名 JWT（智谱 GLM）
+# - api_key:       API Key 值（auth_type=api_key 时使用）
+# - access_token:  Bearer Token 值（auth_type=bearer_token/oauth 时使用）
+# - priority:      优先级（数值越大越优先，用于 PrioritySelector）
+# - disabled:      是否禁用该凭证
+credentials:
+  - id: "none"
+    auth_type: "none"
+
+  - id: "vllm_bearer"
+    provider: "openai_compat"
+    auth_type: "bearer_token"
+    access_token: "vllm-local-token"              # 替换为实际 token
+
+  - id: "openai_key"
+    provider: "openai"
+    auth_type: "bearer_token"
+    access_token: "sk-REPLACE"                    # 替换为 OpenAI API Key
+
+  - id: "claude_key"
+    provider: "claude"
+    auth_type: "api_key"
+    api_key: "sk-ant-REPLACE"                     # 替换为 Anthropic API Key
+
+  - id: "gemini_key"
+    provider: "gemini"
+    auth_type: "api_key"
+    api_key: "AIza-REPLACE"                       # 替换为 Google AI API Key
+
+  - id: "deepseek_key"
+    provider: "deepseek"
+    auth_type: "bearer_token"
+    access_token: "sk-b5fba3c0ccea4dc9b1f2f5e0d58a645d"
+  #
+  # - id: "zhipu_key"                             # 智谱 GLM（JWT 签名认证）
+  #   provider: "zhipu"
+  #   auth_type: "jwt_sign"
+  #   metadata:
+  #     jwt_issuer: "YOUR_API_KEY_ID"
+  #     jwt_secret: "YOUR_API_KEY_SECRET"
+  #     jwt_exp_seconds: 300
