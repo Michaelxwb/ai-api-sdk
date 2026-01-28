@@ -79,7 +79,7 @@ func main() {
 		ID:          "deepseek-from-db",
 		Provider:    "deepseek",
 		AuthType:    auth.AuthTypeBearerToken,
-		AccessToken: "sk-b5fba3c0ccea4dc9b1f2f5e0d58a645d",
+		AccessToken: "sk-sdfsdfd",
 	}
 	deepseekPC := &config.ProviderConfig{
 		Name:    "deepseek",
