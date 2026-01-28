@@ -100,7 +100,7 @@ func (c *Client) Chat(ctx context.Context, providerName string, req provider.Cha
 		}
 		return provider.ChatResponse{}, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		data, _ := io.ReadAll(resp.Body)
 		if c.AuthMgr != nil && cred != nil {

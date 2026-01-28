@@ -1,8 +1,8 @@
 module ai-api-sdk
 
-go 1.21
+go 1.24.0
 
 require (
-	golang.org/x/crypto v0.23.0
+	golang.org/x/crypto v0.47.0
 	gopkg.in/yaml.v3 v3.0.1
 )

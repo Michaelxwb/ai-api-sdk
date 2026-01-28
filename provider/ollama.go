@@ -67,6 +67,6 @@ func (s *OllamaSpec) ParseResponse(resp *http.Response) (ChatResponse, error) {
 	return ChatResponse{Text: parsed.Message.Content, Raw: data}, nil
 }
 
-func (s *OllamaSpec) AuthStrategyOverride(cred *auth.Credential) (auth.AuthStrategy, bool) {
+func (s *OllamaSpec) AuthStrategyOverride(_ *auth.Credential) (auth.AuthStrategy, bool) {
 	return nil, false
 }
