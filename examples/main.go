@@ -6,10 +6,10 @@ import (
 	"os"
 	"time"
 
-	"ai-sec-eval-sdk/auth"
-	"ai-sec-eval-sdk/client"
-	"ai-sec-eval-sdk/config"
-	"ai-sec-eval-sdk/provider"
+	"ai-api-sdk/auth"
+	"ai-api-sdk/client"
+	"ai-api-sdk/config"
+	"ai-api-sdk/provider"
 )
 
 func main() {
@@ -51,35 +51,56 @@ func main() {
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 
-	// Local OpenAI-compatible (llama.cpp / vLLM)
-	resp, err := cli.Chat(ctx, "llama_local", provider.ChatRequest{
-		Model:    "llama3",
-		Messages: []provider.Message{{Role: "user", Content: "你好，介绍一下你的能力"}},
+	resp, err := cli.Chat(ctx, "vllm_local", provider.ChatRequest{
+		Model:    "minimaxai/minimax-m2.1",
+		Messages: []provider.Message{{Role: "user", Content: "安全评估平台要注意哪些关键点？"}},
 	})
 	if err != nil {
-		fmt.Printf("llama_local error: %v\n", err)
+		fmt.Printf("vllm_local error: %v\n", err)
 	} else {
-		fmt.Printf("llama_local response: %s\n", resp.Text)
+		fmt.Printf("vllm_local response: %s\n", resp.Text)
 	}
+
+	// Local OpenAI-compatible (llama.cpp / vLLM)
+	//resp, err := cli.Chat(ctx, "llama_local", provider.ChatRequest{
+	//	Model:    "llama3",
+	//	Messages: []provider.Message{{Role: "user", Content: "你好，介绍一下你的能力"}},
+	//})
+	//if err != nil {
+	//	fmt.Printf("llama_local error: %v\n", err)
+	//} else {
+	//	fmt.Printf("llama_local response: %s\n", resp.Text)
+	//}
 
 	// OpenAI cloud
-	resp, err = cli.Chat(ctx, "openai_cloud", provider.ChatRequest{
-		Model:    "gpt-4o-mini",
-		Messages: []provider.Message{{Role: "user", Content: "安全评估平台要注意哪些关键点？"}},
-	})
-	if err != nil {
-		fmt.Printf("openai_cloud error: %v\n", err)
-	} else {
-		fmt.Printf("openai_cloud response: %s\n", resp.Text)
-	}
+	//resp, err := cli.Chat(ctx, "openai_cloud", provider.ChatRequest{
+	//	Model:    "gpt-4o-mini",
+	//	Messages: []provider.Message{{Role: "user", Content: "安全评估平台要注意哪些关键点？"}},
+	//})
+	//if err != nil {
+	//	fmt.Printf("openai_cloud error: %v\n", err)
+	//} else {
+	//	fmt.Printf("openai_cloud response: %s\n", resp.Text)
+	//}
 
-	resp, err = cli.Chat(ctx, "deepseek", provider.ChatRequest{
-		Model:    "deepseek-chat",
-		Messages: []provider.Message{{Role: "user", Content: "安全评估平台要注意哪些关键点？"}},
-	})
-	if err != nil {
-		fmt.Printf("deepseek error: %v\n", err)
-	} else {
-		fmt.Printf("deepseek response: %s\n", resp.Text)
-	}
+	//resp, err := cli.Chat(ctx, "deepseek", provider.ChatRequest{
+	//	Model:    "deepseek-chat",
+	//	Messages: []provider.Message{{Role: "user", Content: "安全评估平台要注意哪些关键点？"}},
+	//})
+	//if err != nil {
+	//	fmt.Printf("deepseek error: %v\n", err)
+	//} else {
+	//	fmt.Printf("deepseek response: %s\n", resp.Text)
+	//}
+
+	// Custom gateway (New API / One API style)
+	//resp, err := cli.Chat(ctx, "customer_gateway", provider.ChatRequest{
+	//	Model:    "claude-4.5-sonnet",
+	//	Messages: []provider.Message{{Role: "user", Content: "测试自定义网关接入"}},
+	//})
+	//if err != nil {
+	//	fmt.Printf("customer_gateway error: %v\n", err)
+	//} else {
+	//	fmt.Printf("customer_gateway response: %s\n", resp.Text)
+	//}
 }

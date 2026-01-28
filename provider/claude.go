@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"ai-sec-eval-sdk/auth"
+	"ai-api-sdk/auth"
 )
 
 // ClaudeSpec implements Anthropic Claude messages API.
@@ -27,7 +27,8 @@ func (s *ClaudeSpec) SupportedAuthTypes() []auth.AuthType {
 	return []auth.AuthType{auth.AuthTypeAPIKey, auth.AuthTypeOAuth, auth.AuthTypeBearerToken}
 }
 
-func (s *ClaudeSpec) BuildRequest(ctx context.Context, baseURL string, req ChatRequest) (*http.Request, error) {
+func (s *ClaudeSpec) BuildRequest(ctx context.Context, opts BuildOptions, req ChatRequest) (*http.Request, error) {
+	baseURL := opts.BaseURL
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = s.DefaultBaseURL()
 	}

@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"ai-sec-eval-sdk/auth"
+	"ai-api-sdk/auth"
 )
 
 // GeminiSpec implements Gemini generateContent API.
@@ -27,7 +27,8 @@ func (s *GeminiSpec) SupportedAuthTypes() []auth.AuthType {
 	return []auth.AuthType{auth.AuthTypeAPIKey, auth.AuthTypeOAuth, auth.AuthTypeBearerToken}
 }
 
-func (s *GeminiSpec) BuildRequest(ctx context.Context, baseURL string, req ChatRequest) (*http.Request, error) {
+func (s *GeminiSpec) BuildRequest(ctx context.Context, opts BuildOptions, req ChatRequest) (*http.Request, error) {
+	baseURL := opts.BaseURL
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = s.DefaultBaseURL()
 	}
@@ -38,7 +39,7 @@ func (s *GeminiSpec) BuildRequest(ctx context.Context, baseURL string, req ChatR
 			role = "model"
 		}
 		contents = append(contents, map[string]any{
-			"role": role,
+			"role":  role,
 			"parts": []map[string]string{{"text": m.Content}},
 		})
 	}

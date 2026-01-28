@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"time"
 
-	"ai-sec-eval-sdk/auth"
-	"ai-sec-eval-sdk/config"
-	"ai-sec-eval-sdk/provider"
+	"ai-api-sdk/auth"
+	"ai-api-sdk/config"
+	"ai-api-sdk/provider"
 )
 
 // Client provides a unified API client.
@@ -72,7 +72,13 @@ func (c *Client) Chat(ctx context.Context, providerName string, req provider.Cha
 		}
 	}
 
-	httpReq, err := spec.BuildRequest(ctx, baseURL, req)
+	opts := provider.BuildOptions{
+		BaseURL:   baseURL,
+		Path:      pc.Path,
+		ExtraBody: pc.ExtraBody,
+		Headers:   pc.Headers,
+	}
+	httpReq, err := spec.BuildRequest(ctx, opts, req)
 	if err != nil {
 		return provider.ChatResponse{}, err
 	}

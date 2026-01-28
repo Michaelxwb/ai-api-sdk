@@ -1,4 +1,4 @@
-module ai-sec-eval-sdk
+module ai-api-sdk
 
 go 1.21
 

@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"ai-sec-eval-sdk/auth"
+	"ai-api-sdk/auth"
 )
 
 // AuthTransport injects auth into requests and retries on 401 for OAuth.

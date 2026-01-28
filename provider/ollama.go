@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"ai-sec-eval-sdk/auth"
+	"ai-api-sdk/auth"
 )
 
 // OllamaSpec implements Ollama /api/chat.
@@ -27,7 +27,8 @@ func (s *OllamaSpec) SupportedAuthTypes() []auth.AuthType {
 	return []auth.AuthType{auth.AuthTypeNone, auth.AuthTypeBearerToken}
 }
 
-func (s *OllamaSpec) BuildRequest(ctx context.Context, baseURL string, req ChatRequest) (*http.Request, error) {
+func (s *OllamaSpec) BuildRequest(ctx context.Context, opts BuildOptions, req ChatRequest) (*http.Request, error) {
+	baseURL := opts.BaseURL
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = s.DefaultBaseURL()
 	}

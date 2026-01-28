@@ -37,7 +37,7 @@ providers:
 
   - name: "vllm_local"                            # vLLM（OpenAI 兼容）
     type: "openai_compat"
-    base_url: "http://127.0.0.1:8000/v1"
+    base_url: "https://integrate.api.nvidia.com/v1"
     auth_ref: "vllm_bearer"                       # 可选 bearer token
 
   # ---- 云端 API ----
@@ -52,6 +52,17 @@ providers:
   - name: "gemini_cloud"                          # Google Gemini
     type: "gemini"                                # 自动使用 https://generativelanguage.googleapis.com
     auth_ref: "gemini_key"
+
+  # ---- 自定义 OpenAI 兼容网关（客户私有部署） ----
+  - name: "customer_gateway"                      # 客户自建 AI 网关（New API / One API 等）
+    type: "openai_compat"
+    base_url: "https://elysiver.h-e.top/pg"       # 网关地址（不含 endpoint path）
+    path: "/chat/completions"                     # 自定义路径（替代默认 /chat/completions）
+    auth_ref: "customer_cookie"
+    headers:                                      # 网关要求的自定义请求头
+      New-Api-User: "10121"
+    extra_body:                                   # 注入到请求体的额外字段
+      group: "default"
 
   # ---- 更多 OpenAI 兼容平台（取消注释启用） ----
   - name: "deepseek"
@@ -88,7 +99,7 @@ credentials:
   - id: "vllm_bearer"
     provider: "openai_compat"
     auth_type: "bearer_token"
-    access_token: "vllm-local-token"              # 替换为实际 token
+    access_token: "nvapi-usfsdsfs"              # 替换为实际 token
 
   - id: "openai_key"
     provider: "openai"
@@ -105,11 +116,15 @@ credentials:
     auth_type: "api_key"
     api_key: "AIza-REPLACE"                       # 替换为 Google AI API Key
 
+  - id: "customer_cookie"                        # 自定义网关：Cookie 认证
+    auth_type: "none"                             # 认证通过 headers 中的 Cookie 完成
+    headers:
+      Cookie: "session=xxxxx"     # 替换为实际 session cookie
+
   - id: "deepseek_key"
     provider: "deepseek"
     auth_type: "bearer_token"
-    access_token: "sk-b5fba3c0ccea4dc9b1f2f5e0d58a645d"
-  #
+    access_token: "sk-bsdfsdf"
   # - id: "zhipu_key"                             # 智谱 GLM（JWT 签名认证）
   #   provider: "zhipu"
   #   auth_type: "jwt_sign"

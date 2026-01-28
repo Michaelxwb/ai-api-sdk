@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"ai-sec-eval-sdk/auth"
+	"ai-api-sdk/auth"
 )
 
 // OpenAICompatSpec implements OpenAI-compatible chat API.
@@ -36,7 +36,8 @@ func (s *OpenAICompatSpec) SupportedAuthTypes() []auth.AuthType {
 	return []auth.AuthType{auth.AuthTypeBearerToken, auth.AuthTypeAPIKey, auth.AuthTypeNone, auth.AuthTypeOAuth}
 }
 
-func (s *OpenAICompatSpec) BuildRequest(ctx context.Context, baseURL string, req ChatRequest) (*http.Request, error) {
+func (s *OpenAICompatSpec) BuildRequest(ctx context.Context, opts BuildOptions, req ChatRequest) (*http.Request, error) {
+	baseURL := opts.BaseURL
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = s.defaultBaseURL
 	}
@@ -51,11 +52,19 @@ func (s *OpenAICompatSpec) BuildRequest(ctx context.Context, baseURL string, req
 		payload["max_tokens"] = *req.MaxTokens
 	}
 	payload["stream"] = req.Stream
+	// merge extra body fields from config
+	for k, v := range opts.ExtraBody {
+		payload[k] = v
+	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err
 	}
-	url := strings.TrimRight(baseURL, "/") + s.path
+	path := s.path
+	if opts.Path != "" {
+		path = opts.Path
+	}
+	url := strings.TrimRight(baseURL, "/") + path
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, err

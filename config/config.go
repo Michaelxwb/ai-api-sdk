@@ -1,7 +1,7 @@
 package config
 
 import (
-	"ai-sec-eval-sdk/auth"
+	"ai-api-sdk/auth"
 )
 
 // Config is the top-level configuration.
@@ -26,13 +26,13 @@ type StoreConfig struct {
 
 // EncryptionConfig defines encryption settings.
 type EncryptionConfig struct {
-	Enabled          bool             `yaml:"enabled"`
-	Algo             string           `yaml:"algo"`
-	KDF              string           `yaml:"kdf"`
-	KDFParams        KDFParams        `yaml:"kdf_params"`
-	MasterKeySource  string           `yaml:"master_key_source"`
-	MasterKeyFile    string           `yaml:"master_key_file"`
-	MasterKeyEnv     string           `yaml:"master_key_env"`
+	Enabled         bool      `yaml:"enabled"`
+	Algo            string    `yaml:"algo"`
+	KDF             string    `yaml:"kdf"`
+	KDFParams       KDFParams `yaml:"kdf_params"`
+	MasterKeySource string    `yaml:"master_key_source"`
+	MasterKeyFile   string    `yaml:"master_key_file"`
+	MasterKeyEnv    string    `yaml:"master_key_env"`
 }
 
 // KDFParams configures scrypt.
@@ -45,11 +45,13 @@ type KDFParams struct {
 
 // ProviderConfig configures a provider instance.
 type ProviderConfig struct {
-	Name     string            `yaml:"name"`
-	Type     string            `yaml:"type"`
-	BaseURL  string            `yaml:"base_url"`
-	AuthRef  string            `yaml:"auth_ref"`
-	Headers  map[string]string `yaml:"headers"`
+	Name      string            `yaml:"name"`
+	Type      string            `yaml:"type"`
+	BaseURL   string            `yaml:"base_url"`
+	Path      string            `yaml:"path,omitempty"` // override endpoint path (e.g. "/chat/completions")
+	AuthRef   string            `yaml:"auth_ref"`
+	Headers   map[string]string `yaml:"headers,omitempty"`
+	ExtraBody map[string]any    `yaml:"extra_body,omitempty"` // extra fields merged into request body
 }
 
 // FindProvider returns provider config by name.
