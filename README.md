@@ -44,7 +44,7 @@ ai-api-sdk/
 ### 安装
 
 ```bash
-go get github.com/router-for-me/ai-api-sdk
+go get github.com/Michaelxwb/ai-api-sdk
 ```
 
 ### 配置
@@ -89,10 +89,10 @@ import (
     "context"
     "fmt"
 
-    "github.com/router-for-me/ai-api-sdk/auth"
-    "github.com/router-for-me/ai-api-sdk/client"
-    "github.com/router-for-me/ai-api-sdk/config"
-    "github.com/router-for-me/ai-api-sdk/provider"
+    "github.com/Michaelxwb/ai-api-sdk/auth"
+    "github.com/Michaelxwb/ai-api-sdk/client"
+    "github.com/Michaelxwb/ai-api-sdk/config"
+    "github.com/Michaelxwb/ai-api-sdk/provider"
 )
 
 func main() {
