@@ -20,13 +20,78 @@ type Client struct {
 	Config  *config.Config
 }
 
-// NewClient creates a new client with default settings.
+// New creates a lightweight client for platform integration (ChatWith mode).
+func New() *Client {
+	return &Client{HTTP: &http.Client{Timeout: 60 * time.Second}}
+}
+
+// NewClient creates a client with local config and auth manager (Chat mode).
 func NewClient(cfg *config.Config, mgr *auth.Manager) *Client {
 	httpClient := &http.Client{Timeout: 60 * time.Second}
 	return &Client{HTTP: httpClient, AuthMgr: mgr, Config: cfg}
 }
 
-// Chat sends a unified chat request to a provider.
+// ChatWith sends a request using caller-provided credential and provider config.
+// This is the primary interface for platform integration — the platform manages
+// credentials in its own database and passes them directly to the SDK.
+func (c *Client) ChatWith(ctx context.Context, cred *auth.Credential, pc *config.ProviderConfig, req provider.ChatRequest) (provider.ChatResponse, error) {
+	if pc == nil {
+		return provider.ChatResponse{}, errors.New("client: missing provider config")
+	}
+	specName := pc.Type
+	if specName == "" {
+		specName = pc.Name
+	}
+	spec, ok := provider.Get(specName)
+	if !ok {
+		return provider.ChatResponse{}, fmt.Errorf("client: provider spec %s not registered", specName)
+	}
+	baseURL := pc.BaseURL
+	if baseURL == "" {
+		baseURL = spec.DefaultBaseURL()
+	}
+
+	strategy := auth.NewStrategyFromCredential(cred)
+	if cred != nil {
+		if override, ok := spec.AuthStrategyOverride(cred); ok {
+			strategy = override
+		}
+	}
+
+	opts := provider.BuildOptions{
+		BaseURL:   baseURL,
+		Path:      pc.Path,
+		ExtraBody: pc.ExtraBody,
+		Headers:   pc.Headers,
+	}
+	httpReq, err := spec.BuildRequest(ctx, opts, req)
+	if err != nil {
+		return provider.ChatResponse{}, err
+	}
+	for k, v := range pc.Headers {
+		httpReq.Header.Set(k, v)
+	}
+
+	transport := &AuthTransport{
+		Base:     c.HTTP.Transport,
+		Strategy: strategy,
+		Cred:     cred,
+	}
+	httpClient := &http.Client{Transport: transport, Timeout: c.HTTP.Timeout}
+	resp, err := httpClient.Do(httpReq)
+	if err != nil {
+		return provider.ChatResponse{}, err
+	}
+	defer func() { _ = resp.Body.Close() }()
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		data, _ := io.ReadAll(resp.Body)
+		return provider.ChatResponse{}, fmt.Errorf("client: status %d: %s", resp.StatusCode, string(data))
+	}
+	return spec.ParseResponse(resp)
+}
+
+// Chat sends a request using local config.yaml and auth manager.
+// Suitable for CLI tools and standalone usage.
 func (c *Client) Chat(ctx context.Context, providerName string, req provider.ChatRequest) (provider.ChatResponse, error) {
 	if c == nil || c.Config == nil {
 		return provider.ChatResponse{}, errors.New("client: missing config")

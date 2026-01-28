@@ -36,7 +36,9 @@ ai-api-sdk/
 │   └── loader.go           # YAML 配置加载
 └── examples/               # 示例
     ├── config.example.yaml # 示例配置
-    └── main.go             # 接入示例
+    ├── main.go             # 本地模式示例（Chat）
+    └── chatwith/
+        └── main.go         # 平台集成模式示例（ChatWith）
 ```
 
 ## 快速开始
@@ -119,6 +121,68 @@ func main() {
     fmt.Println(resp.Text)
 }
 ```
+
+### 平台集成模式（ChatWith）
+
+适用于平台自行管理凭证（如数据库存储），无需 `config.yaml` 和 `Manager`，直接传入凭证调用模型：
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "time"
+
+    "github.com/Michaelxwb/ai-api-sdk/auth"
+    "github.com/Michaelxwb/ai-api-sdk/client"
+    "github.com/Michaelxwb/ai-api-sdk/config"
+    "github.com/Michaelxwb/ai-api-sdk/provider"
+
+    _ "github.com/Michaelxwb/ai-api-sdk/provider" // 注册所有 provider
+)
+
+func main() {
+    cli := client.New() // 轻量构造，不依赖 config.yaml
+
+    ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
+    defer cancel()
+
+    // 凭证由平台从数据库等外部来源构造
+    cred := &auth.Credential{
+        ID:          "deepseek-from-db",
+        Provider:    "deepseek",
+        AuthType:    auth.AuthTypeBearerToken,
+        AccessToken: "sk-xxx", // 平台从数据库读取后传入
+    }
+    pc := &config.ProviderConfig{
+        Name:    "deepseek",
+        Type:    "deepseek",
+        BaseURL: "https://api.deepseek.com/v1",
+    }
+
+    resp, err := cli.ChatWith(ctx, cred, pc, provider.ChatRequest{
+        Model:    "deepseek-chat",
+        Messages: []provider.Message{{Role: "user", Content: "Hello"}},
+    })
+    if err != nil {
+        fmt.Printf("error: %v\n", err)
+        return
+    }
+    fmt.Println(resp.Text)
+}
+```
+
+**两种模式对比：**
+
+| | `Chat`（本地模式） | `ChatWith`（平台集成模式） |
+|---|---|---|
+| 构造方式 | `client.NewClient(cfg, mgr)` | `client.New()` |
+| 凭证来源 | `config.yaml` + `Manager` 管理 | 调用方直接传入 `*auth.Credential` |
+| 适用场景 | CLI 工具、独立程序 | SaaS 平台、多租户后端 |
+| 凭证轮转 | 内置 Round-Robin / Priority | 由平台自行管理 |
+
+完整示例见 [`examples/chatwith/main.go`](examples/chatwith/main.go)。
 
 ## 支持的平台
 
