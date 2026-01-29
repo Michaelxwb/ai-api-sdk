@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"strings"
 
-	"ai-api-sdk/auth"
+	"github.com/Michaelxwb/ai-api-sdk/auth"
 )
 
 // OllamaSpec implements Ollama /api/chat.

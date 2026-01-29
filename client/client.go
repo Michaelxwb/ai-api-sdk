@@ -8,9 +8,9 @@ import (
 	"net/http"
 	"time"
 
-	"ai-api-sdk/auth"
-	"ai-api-sdk/config"
-	"ai-api-sdk/provider"
+	"github.com/Michaelxwb/ai-api-sdk/auth"
+	"github.com/Michaelxwb/ai-api-sdk/config"
+	"github.com/Michaelxwb/ai-api-sdk/provider"
 )
 
 // Client provides a unified API client.

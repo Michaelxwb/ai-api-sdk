@@ -1,7 +1,7 @@
 package config
 
 import (
-	"ai-api-sdk/auth"
+	"github.com/Michaelxwb/ai-api-sdk/auth"
 )
 
 // Config is the top-level configuration.

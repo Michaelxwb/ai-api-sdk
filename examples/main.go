@@ -6,10 +6,10 @@ import (
 	"os"
 	"time"
 
-	"ai-api-sdk/auth"
-	"ai-api-sdk/client"
-	"ai-api-sdk/config"
-	"ai-api-sdk/provider"
+	"github.com/Michaelxwb/ai-api-sdk/auth"
+	"github.com/Michaelxwb/ai-api-sdk/client"
+	"github.com/Michaelxwb/ai-api-sdk/config"
+	"github.com/Michaelxwb/ai-api-sdk/provider"
 )
 
 func main() {

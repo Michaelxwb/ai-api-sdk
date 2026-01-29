@@ -7,13 +7,13 @@ import (
 	"fmt"
 	"time"
 
-	"ai-api-sdk/auth"
-	"ai-api-sdk/client"
-	"ai-api-sdk/config"
-	"ai-api-sdk/provider"
+	"github.com/Michaelxwb/ai-api-sdk/auth"
+	"github.com/Michaelxwb/ai-api-sdk/client"
+	"github.com/Michaelxwb/ai-api-sdk/config"
+	"github.com/Michaelxwb/ai-api-sdk/provider"
 
 	// 注册所有 provider（init 自动触发）
-	_ "ai-api-sdk/provider"
+	_ "github.com/Michaelxwb/ai-api-sdk/provider"
 )
 
 func main() {
@@ -95,6 +95,18 @@ func main() {
 		fmt.Printf("[DeepSeek] error: %v\n", err)
 	} else {
 		fmt.Printf("[DeepSeek] response: %s\n", resp.Text)
+	}
+
+	// ----------------------------------------------------------------
+	// 连通性测试示例
+	// ----------------------------------------------------------------
+	testResult, err := cli.TestWith(ctx, deepseekCred, deepseekPC, &client.TestOptions{
+		Model: "deepseek-chat",
+	})
+	if err != nil {
+		fmt.Printf("[DeepSeek Test] failed: %v (latency: %s)\n", err, testResult.Latency)
+	} else {
+		fmt.Printf("[DeepSeek Test] success, latency: %s\n", testResult.Latency)
 	}
 
 	//// ----------------------------------------------------------------

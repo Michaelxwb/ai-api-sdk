@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"ai-api-sdk/auth"
+	"github.com/Michaelxwb/ai-api-sdk/auth"
 )
 
 // Message is a simplified chat message.
