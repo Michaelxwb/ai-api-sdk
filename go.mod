@@ -1,4 +1,4 @@
-module ai-api-sdk
+module github.com/Michaelxwb/ai-api-sdk
 
 go 1.23.0
 
