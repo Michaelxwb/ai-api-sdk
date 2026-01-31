@@ -1,0 +1,174 @@
+核心发现
+
+1. CLI 工具的 session_id 是本地持久化实现
+
+- Codex CLI：官方文档明确"对话记录（transcripts）保存在本地，以便恢复对话"
+- Claude CLI：支持 -r <session-id> 恢复，社区证据指向本地 jsonl 文件
+- 关键：这些是 CLI 层的本地状态管理，不是 REST API 的服务端特性
+
+2. REST API 层确实是无状态的
+
+- OpenAI/Claude/Gemini 的 Chat/Messages API 没有 session_id 参数
+- 多轮对话需要客户端每次传完整 messages 数组
+
+3. 架构层级差异
+
+┌────────────────────────────────────┐
+│ CLI 工具层 (Codex/Claude CLI)       │  ← 有 session_id（本地持久化）
+│ - 本地存储历史消息                    │
+│ - 跨进程恢复会话                     │
+└───────────┬────────────────────────┘
+          │ 调用
+┌───────────▼────────────────────────┐
+│ REST API 层 (OpenAI/Claude API)     │  ← 无 session_id（无状态）
+│ - 每次传完整 messages                │
+└────────────────────────────────────┘
+
+修正后的设计方案
+
+基于 Codex 的建议，采用混合方案：
+
+核心设计原则
+
+┌─────────────────────────────────────────┐
+│ 应用层                                  │
+├─────────────────────────────────────────┤
+│ Session 层 (可选)                       │  ← 客户端状态管理
+│ - 内存历史管理                          │
+│ - 可选持久化（文件/DB）                 │
+│ - Token 限制/截断策略                   │
+├─────────────────────────────────────────┤
+│ Client 层 (核心)                        │  ← 无状态封装
+│ - Chat(messages) 无状态接口             │
+│ - 认证、重试、错误处理                  │
+├─────────────────────────────────────────┤
+│ Provider 层                             │
+│ - OpenAI/Claude/Gemini 协议适配         │
+└─────────────────────────────────────────┘
+
+推荐实现路径
+
+Phase 1 - 保持核心简单：
+// 核心保持无状态（已有）
+resp, _ := cli.Chat(ctx, "openai", provider.ChatRequest{
+  Model:    "gpt-4",
+  Messages: []provider.Message{...}, // 调用方管理历史
+})
+
+Phase 2 - 添加可选 Session 层：
+// 新建 session 包（独立于 client）
+sess := session.New("session-123", "openai", "gpt-4",
+  session.WithStore(store.FileStore{BaseDir: "./sessions"}),
+  session.WithPolicy(session.WindowPolicy{N: 20}),
+)
+
+// 自动管理历史
+resp1, _ := sess.Chat(ctx, cli, "介绍 Go 语言")
+resp2, _ := sess.Chat(ctx, cli, "它的并发模型？") // 自动追加历史
+
+// 持久化和恢复
+sess.Save() // 保存到文件
+sess2, _ := session.Resume(ctx, store, "session-123")
+
+完整接口定义
+
+基于 Codex 的草案，这是适配你项目的版本：
+
+// session/session.go
+package session
+
+import (
+  "context"
+  "github.com/Michaelxwb/ai-api-sdk/provider"
+  "github.com/Michaelxwb/ai-api-sdk/client"
+)
+
+type Session struct {
+  id       string
+  provider string
+  model    string
+  messages []provider.Message
+  store    Store                // 可选持久化
+  policy   TruncatePolicy       // Token 限制策略
+}
+
+// 核心方法：自动管理历史
+func (s *Session) Chat(ctx context.Context, cli *client.Client, userMsg string) (string, error) {
+  // 1. 追加用户消息
+  s.messages = append(s.messages, provider.Message{Role: "user", Content: userMsg})
+
+  // 2. 应用截断策略（如果有）
+  msgs := s.messages
+  if s.policy != nil {
+      msgs = s.policy.Truncate(msgs)
+  }
+
+  // 3. 调用无状态 API
+  resp, err := cli.Chat(ctx, s.provider, provider.ChatRequest{
+      Model:    s.model,
+      Messages: msgs, // 传完整历史
+  })
+  if err != nil {
+      return "", err
+  }
+
+  // 4. 追加助手回复
+  s.messages = append(s.messages, provider.Message{Role: "assistant", Content: resp.Text})
+
+  // 5. 可选持久化
+  if s.store != nil {
+      _ = s.store.Save(ctx, s.Snapshot())
+  }
+
+  return resp.Text, nil
+}
+
+// 序列化/反序列化（用于恢复）
+func (s *Session) Snapshot() *SessionSnapshot
+func Resume(ctx context.Context, store Store, id string) (*Session, error)
+
+最佳实践建议
+
+✅ 应该做的
+
+1. 保持 client 层无状态：不破坏现有 API
+2. Session 作为可选层：按需使用
+3. 提供文件存储实现：零配置持久化
+4. 支持序列化/恢复：类似 CLI 的体验
+
+❌ 不应该做的
+
+1. 不要强制 Session：保留无状态选项
+2. 不要耦合 provider：Session 应该是通用的
+3. 不要过度设计：MVP 先做内存 + 文件存储
+
+使用示例对比
+
+// 场景 1：简单调用（无状态）
+resp, _ := cli.Chat(ctx, "openai", provider.ChatRequest{
+  Model:    "gpt-4",
+  Messages: []provider.Message{{Role: "user", Content: "hello"}},
+})
+
+// 场景 2：多轮对话（内存 Session）
+sess := session.New("temp", "openai", "gpt-4")
+resp1, _ := sess.Chat(ctx, cli, "介绍 Go")
+resp2, _ := sess.Chat(ctx, cli, "继续")
+
+// 场景 3：可恢复会话（持久化）
+sess := session.New("proj-001", "openai", "gpt-4",
+  session.WithStore(store.FileStore{BaseDir: "./sessions"}),
+)
+sess.Chat(ctx, cli, "任务 A")
+// ... 进程重启 ...
+sess2, _ := session.Resume(ctx, store, "proj-001")
+sess2.Chat(ctx, cli, "继续任务 A") // 恢复历史上下文
+
+下一步建议
+
+是否需要我使用 codeagent 开始实现这个方案？我可以：
+1. 创建 session/ 包（Session 结构体、Store 接口）
+2. 实现 store/file_store.go（文件持久化）
+3. 实现 session/policy.go（Window/FIFO 截断策略）
+4. 添加完整的测试用例
+5. 更新 README 和使用示例

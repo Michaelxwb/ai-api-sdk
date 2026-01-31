@@ -11,6 +11,7 @@ import (
 	"github.com/Michaelxwb/ai-api-sdk/auth"
 	"github.com/Michaelxwb/ai-api-sdk/config"
 	"github.com/Michaelxwb/ai-api-sdk/provider"
+	"github.com/Michaelxwb/ai-api-sdk/session"
 )
 
 // Client provides a unified API client.
@@ -18,6 +19,11 @@ type Client struct {
 	HTTP    *http.Client
 	AuthMgr *auth.Manager
 	Config  *config.Config
+
+	// SessionStore enables multi-turn conversation persistence.
+	SessionStore session.SessionStore
+	// SessionConfig controls session behaviors such as auto-create and truncation.
+	SessionConfig SessionConfig
 }
 
 // New creates a lightweight client for platform integration (ChatWith mode).

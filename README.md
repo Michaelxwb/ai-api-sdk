@@ -8,6 +8,7 @@
 - **多平台适配** - 内置 OpenAI、Claude、Gemini、Ollama 及通用 OpenAI 兼容协议支持
 - **凭证安全存储** - AES-256-GCM 加密 + scrypt KDF，支持环境变量 / 密钥文件管理 master key
 - **多凭证轮转** - Round-Robin / Priority 选择策略，故障自动冷却切换
+- **多轮对话支持** - 接口驱动设计，支持内存/文件/SQLite/Redis 等多种存储方案
 - **可配置扩展** - 自定义路径、请求头、请求体字段，无需写代码即可接入非标准网关
 
 ## 项目结构
@@ -30,15 +31,37 @@ ai-api-sdk/
 │   └── openai_compat.go    # 通用 OpenAI 兼容（vLLM/llama.cpp/TGI/自定义网关）
 ├── client/                 # 统一客户端
 │   ├── client.go           # Client 封装（统一 Chat 入口）
+│   ├── session.go          # ChatSession 实现（多轮对话）
+│   ├── session_config.go   # 会话配置
 │   └── transport.go        # AuthTransport（http.RoundTripper 认证注入）
+├── session/                # 会话管理（多轮对话）
+│   ├── store.go            # SessionStore 接口定义
+│   ├── types.go            # SessionMeta、GetOptions 等
+│   └── truncate.go         # 截断策略
 ├── config/                 # 配置
 │   ├── config.go           # 配置结构体
 │   └── loader.go           # YAML 配置加载
+├── docs/                   # 文档
+│   ├── session-api.md      # Session API 文档
+│   └── session-tutorial.md # 使用教程
 └── examples/               # 示例
     ├── config.example.yaml # 示例配置
     ├── main.go             # 本地模式示例（Chat）
-    └── chatwith/
-        └── main.go         # 平台集成模式示例（ChatWith）
+    ├── chatwith/
+    │   └── main.go         # 平台集成模式示例（ChatWith）
+    ├── sessionstore/       # 存储实现示例
+    │   ├── memory.go       # 内存存储
+    │   ├── file.go         # 文件存储
+    │   ├── sqlite.go       # SQLite 存储
+    │   ├── postgres.go     # PostgreSQL 存储
+    │   ├── mysql.go        # MySQL 存储
+    │   ├── redis.go        # Redis 存储
+    │   └── helpers.go      # 共享辅助函数
+    ├── session-basic/      # 基础多轮对话示例
+    ├── session-advanced/   # 高级特性示例
+    ├── session-sqlite/     # SQLite 完整示例
+    ├── session-postgres/   # PostgreSQL 示例
+    └── session-mysql/      # MySQL 示例
 ```
 
 ## 快速开始
@@ -184,6 +207,143 @@ func main() {
 
 完整示例见 [`examples/chatwith/main.go`](examples/chatwith/main.go)。
 
+## 多轮对话
+
+SDK 提供了灵活的多轮对话支持，通过接口定义标准，应用层选择存储方案（内存、文件、SQLite、Redis 等）。
+
+### 核心特性
+
+- **接口驱动** - SDK 定义标准接口，应用层实现存储
+- **多种存储** - 内置 Memory/File/SQLite/Redis 四种参考实现
+- **自动历史** - `ChatSession()` 自动获取和保存对话历史
+- **截断策略** - 支持窗口截断，防止超出 Token 限制
+- **元数据管理** - 可选的会话元数据（用户信息、业务数据）
+- **并发安全** - 不同存储方案提供不同级别的并发支持
+
+### 快速开始
+
+#### 1. 内存存储（最简单）
+
+适合开发测试和临时对话：
+
+```go
+import (
+    "github.com/Michaelxwb/ai-api-sdk/examples/sessionstore"
+    "github.com/Michaelxwb/ai-api-sdk/session"
+)
+
+// 配置会话存储
+cli.SessionStore = sessionstore.NewMemoryStore()
+cli.SessionConfig = client.SessionConfig{
+    AutoCreate: true,
+    TruncatePolicy: session.WindowPolicy{
+        MaxMessages:      20,
+        KeepSystemPrompt: true,
+    },
+}
+
+sessionID := "user-001"
+
+// 第一轮对话
+ctx1, cancel1 := context.WithTimeout(context.Background(), 300*time.Second)
+defer cancel1()
+resp1, _ := cli.ChatSession(ctx1, "openai", sessionID, provider.ChatRequest{
+    Model:    "gpt-4",
+    Messages: []provider.Message{{Role: "user", Content: "介绍一下 Go 语言"}},
+})
+
+// 第二轮对话（自动携带第一轮的历史）
+ctx2, cancel2 := context.WithTimeout(context.Background(), 300*time.Second)
+defer cancel2()
+resp2, _ := cli.ChatSession(ctx2, "openai", sessionID, provider.ChatRequest{
+    Model:    "gpt-4",
+    Messages: []provider.Message{{Role: "user", Content: "它的并发模型是什么？"}},
+})
+```
+
+#### 2. SQLite 存储（推荐生产）
+
+支持持久化和并发访问：
+
+```go
+// 创建 SQLite 存储
+store, _ := sessionstore.NewSQLiteStore("./sessions.db")
+defer store.Close()
+
+cli.SessionStore = store
+cli.SessionConfig.AutoCreate = true
+
+// 多轮对话（自动持久化）
+cli.ChatSession(ctx, "openai", sessionID, req1)
+time.Sleep(2 * time.Second) // 避免速率限制
+cli.ChatSession(ctx, "openai", sessionID, req2)
+
+// 程序重启后恢复会话
+messages, _ := store.GetMessages(context.Background(), sessionID, session.GetOptions{})
+```
+
+### 存储方案对比
+
+| 存储 | 持久化 | 并发 | 适用场景 |
+|-----|--------|------|---------|
+| Memory | ❌ | ✅ | 开发测试、临时对话 |
+| File | ✅ | 🟡 | 单机小规模 |
+| SQLite | ✅ | ✅ | 单机生产环境（推荐） |
+| PostgreSQL | ✅ | ✅✅ | 高并发、复杂查询、大规模数据 |
+| MySQL | ✅ | ✅✅ | 传统应用、主从复制、云托管 |
+| Redis | ✅ | ✅✅ | 分布式、极高并发、TTL 过期 |
+
+### 常见场景
+
+**客服机器人**：
+```go
+userID := "user-12345"
+sessionID := fmt.Sprintf("customer-%s", userID)
+
+// 查询历史显示
+history, _ := store.GetMessages(ctx, sessionID, session.GetOptions{MaxMessages: 10})
+
+// 继续对话
+resp, _ := cli.ChatSession(ctx, "openai", sessionID, provider.ChatRequest{
+    Model:    "gpt-4",
+    Messages: []provider.Message{{Role: "user", Content: userInput}},
+})
+```
+
+**会话元数据**：
+```go
+meta := &session.SessionMeta{
+    ID:       sessionID,
+    Provider: "openai",
+    Model:    "gpt-4",
+    Attrs: map[string]any{
+        "user_id":    "user-123",
+        "department": "销售部",
+    },
+}
+store.(session.SessionStoreWithMeta).UpsertMeta(ctx, sessionID, meta)
+```
+
+**定期清理**：
+```go
+// 清理 30 天前的旧会话
+sqliteStore.CleanupOldSessions(ctx, 30*24*time.Hour)
+```
+
+### 注意事项
+
+1. **Context 管理** - 每次 API 调用创建独立 context，避免超时累积
+2. **速率限制** - 连续请求之间添加延迟（如 2 秒）
+3. **Token 限制** - 配置合理的截断策略
+4. **并发安全** - 文件存储不适合高并发，推荐 SQLite 或 Redis
+
+### 完整文档
+
+- [API 文档](docs/session-api.md) - 接口定义和详细说明
+- [使用教程](docs/session-tutorial.md) - 快速入门和常见场景
+- [数据库存储](docs/session-database.md) - PostgreSQL 和 MySQL 使用指南
+- [示例代码](examples/) - session-basic / session-advanced / session-sqlite / session-postgres / session-mysql
+
 ## 支持的平台
 
 | 平台 | type 值 | 认证方式 | 说明 |
@@ -278,6 +438,10 @@ func (s *MyPlatformSpec) AuthStrategyOverride(cred *auth.Credential) (auth.AuthS
 
 - `golang.org/x/crypto` - scrypt KDF
 - `gopkg.in/yaml.v3` - YAML 配置解析
+- `github.com/mattn/go-sqlite3` - SQLite 存储（可选）
+- `github.com/lib/pq` - PostgreSQL 存储（可选）
+- `github.com/go-sql-driver/mysql` - MySQL 存储（可选）
+- `github.com/redis/go-redis/v9` - Redis 存储（可选）
 - Go 标准库 - AES-GCM、HTTP、JSON
 
 ## License

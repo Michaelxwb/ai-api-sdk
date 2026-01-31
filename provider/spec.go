@@ -11,6 +11,7 @@ import (
 type Message struct {
 	Role    string `json:"role"`
 	Content string `json:"content"`
+	Name    string `json:"name,omitempty"`
 }
 
 // ChatRequest is a unified request structure.
