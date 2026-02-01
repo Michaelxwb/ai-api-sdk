@@ -4,7 +4,7 @@ import (
 	"context"
 	"sync"
 
-	"github.com/Michaelxwb/ai-api-sdk/provider"
+	"github.com/Michaelxwb/ai-api-sdk/provider/base"
 	"github.com/Michaelxwb/ai-api-sdk/session"
 )
 
@@ -15,7 +15,7 @@ type MemoryStore struct {
 }
 
 type memorySession struct {
-	messages []provider.Message
+	messages []base.Message
 	meta     session.SessionMeta
 	version  int64
 	closed   bool
@@ -27,7 +27,7 @@ func NewMemoryStore() *MemoryStore {
 }
 
 // GetMessages retrieves messages for a session.
-func (s *MemoryStore) GetMessages(_ context.Context, sessionID string, opts session.GetOptions) ([]provider.Message, error) {
+func (s *MemoryStore) GetMessages(_ context.Context, sessionID string, opts session.GetOptions) ([]base.Message, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 
@@ -39,7 +39,7 @@ func (s *MemoryStore) GetMessages(_ context.Context, sessionID string, opts sess
 		return nil, session.ErrSessionClosed
 	}
 
-	msgs := append([]provider.Message(nil), entry.messages...)
+	msgs := append([]base.Message(nil), entry.messages...)
 	if opts.MaxMessages > 0 {
 		policy := session.WindowPolicy{
 			MaxMessages:      opts.MaxMessages,
@@ -51,7 +51,7 @@ func (s *MemoryStore) GetMessages(_ context.Context, sessionID string, opts sess
 }
 
 // AppendMessages appends messages to a session.
-func (s *MemoryStore) AppendMessages(_ context.Context, sessionID string, msgs []provider.Message) error {
+func (s *MemoryStore) AppendMessages(_ context.Context, sessionID string, msgs []base.Message) error {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -141,7 +141,7 @@ func (s *MemoryStore) GetVersion(_ context.Context, sessionID string) (int64, er
 }
 
 // AppendMessagesWithVersion appends messages with optimistic locking.
-func (s *MemoryStore) AppendMessagesWithVersion(_ context.Context, sessionID string, expectedVersion int64, msgs []provider.Message) (int64, error) {
+func (s *MemoryStore) AppendMessagesWithVersion(_ context.Context, sessionID string, expectedVersion int64, msgs []base.Message) (int64, error) {
 	if len(msgs) == 0 {
 		return expectedVersion, nil
 	}

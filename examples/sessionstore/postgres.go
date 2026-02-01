@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Michaelxwb/ai-api-sdk/provider"
+	"github.com/Michaelxwb/ai-api-sdk/provider/base"
 	"github.com/Michaelxwb/ai-api-sdk/session"
 	_ "github.com/lib/pq"
 )
@@ -93,7 +93,7 @@ func (s *PostgresStore) Close() error {
 
 // GetMessages retrieves message history for a session.
 // Implements session.SessionStore interface.
-func (s *PostgresStore) GetMessages(ctx context.Context, sessionID string, opts session.GetOptions) ([]provider.Message, error) {
+func (s *PostgresStore) GetMessages(ctx context.Context, sessionID string, opts session.GetOptions) ([]base.Message, error) {
 	query := `
 		SELECT role, content, name
 		FROM session_messages
@@ -126,9 +126,9 @@ func (s *PostgresStore) GetMessages(ctx context.Context, sessionID string, opts 
 	}
 	defer rows.Close()
 
-	var messages []provider.Message
+	var messages []base.Message
 	for rows.Next() {
-		var msg provider.Message
+		var msg base.Message
 		var name sql.NullString
 
 		if err := rows.Scan(&msg.Role, &msg.Content, &name); err != nil {
@@ -159,7 +159,7 @@ func (s *PostgresStore) GetMessages(ctx context.Context, sessionID string, opts 
 			// System prompt already first, do nothing
 		} else {
 			// Try to find system prompt in full history
-			var systemPrompt *provider.Message
+			var systemPrompt *base.Message
 			row := s.db.QueryRowContext(ctx, `
 				SELECT role, content, name
 				FROM session_messages
@@ -168,7 +168,7 @@ func (s *PostgresStore) GetMessages(ctx context.Context, sessionID string, opts 
 				LIMIT 1
 			`, sessionID)
 
-			var msg provider.Message
+			var msg base.Message
 			var name sql.NullString
 			if err := row.Scan(&msg.Role, &msg.Content, &name); err == nil {
 				if name.Valid {
@@ -178,7 +178,7 @@ func (s *PostgresStore) GetMessages(ctx context.Context, sessionID string, opts 
 			}
 
 			if systemPrompt != nil {
-				messages = append([]provider.Message{*systemPrompt}, messages...)
+				messages = append([]base.Message{*systemPrompt}, messages...)
 			}
 		}
 	}
@@ -188,7 +188,7 @@ func (s *PostgresStore) GetMessages(ctx context.Context, sessionID string, opts 
 
 // AppendMessages adds new messages to a session.
 // Implements session.SessionStore interface.
-func (s *PostgresStore) AppendMessages(ctx context.Context, sessionID string, msgs []provider.Message) error {
+func (s *PostgresStore) AppendMessages(ctx context.Context, sessionID string, msgs []base.Message) error {
 	if len(msgs) == 0 {
 		return nil
 	}

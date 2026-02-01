@@ -34,3 +34,10 @@ credentials.enc.json
 # Build output
 /bin/
 /dist/
+
+# Session storage files (examples)
+sessions.db
+sessions.json
+*.db
+*.db-shm
+*.db-wal

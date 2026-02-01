@@ -7,7 +7,7 @@ import (
 
 	"github.com/Michaelxwb/ai-api-sdk/auth"
 	"github.com/Michaelxwb/ai-api-sdk/config"
-	"github.com/Michaelxwb/ai-api-sdk/provider"
+	"github.com/Michaelxwb/ai-api-sdk/provider/base"
 )
 
 const defaultTestTimeout = 10 * time.Second
@@ -22,8 +22,8 @@ type TestOptions struct {
 
 // TestResult 连通性测试结果
 type TestResult struct {
-	Latency  time.Duration         // 请求延迟
-	Response provider.ChatResponse // 原始响应
+	Latency  time.Duration     // 请求延迟
+	Response base.ChatResponse // 原始响应
 }
 
 // TestWith 平台集成模式的连通性测试
@@ -40,9 +40,9 @@ func (c *Client) TestWith(ctx context.Context, cred *auth.Credential, pc *config
 
 	temp := float32(0)
 	maxTokens := optVal.MaxTokens
-	req := provider.ChatRequest{
+	req := base.ChatRequest{
 		Model:       optVal.Model,
-		Messages:    []provider.Message{{Role: "user", Content: optVal.Prompt}},
+		Messages:    []base.Message{{Role: "user", Content: optVal.Prompt}},
 		Temperature: &temp,
 		MaxTokens:   &maxTokens,
 		Stream:      false,
@@ -66,9 +66,9 @@ func (c *Client) Test(ctx context.Context, providerName string, opt *TestOptions
 
 	temp := float32(0)
 	maxTokens := optVal.MaxTokens
-	req := provider.ChatRequest{
+	req := base.ChatRequest{
 		Model:       optVal.Model,
-		Messages:    []provider.Message{{Role: "user", Content: optVal.Prompt}},
+		Messages:    []base.Message{{Role: "user", Content: optVal.Prompt}},
 		Temperature: &temp,
 		MaxTokens:   &maxTokens,
 		Stream:      false,

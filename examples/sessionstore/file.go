@@ -7,7 +7,7 @@ import (
 	"path/filepath"
 	"sync"
 
-	"github.com/Michaelxwb/ai-api-sdk/provider"
+	"github.com/Michaelxwb/ai-api-sdk/provider/base"
 	"github.com/Michaelxwb/ai-api-sdk/session"
 )
 
@@ -20,7 +20,7 @@ type FileStore struct {
 }
 
 type fileSession struct {
-	Messages []provider.Message  `json:"messages"`
+	Messages []base.Message      `json:"messages"`
 	Meta     session.SessionMeta `json:"meta"`
 	Version  int64               `json:"version"`
 }
@@ -42,7 +42,7 @@ func NewFileStore(path string) (*FileStore, error) {
 }
 
 // GetMessages retrieves message history for a session.
-func (s *FileStore) GetMessages(_ context.Context, sessionID string, opts session.GetOptions) ([]provider.Message, error) {
+func (s *FileStore) GetMessages(_ context.Context, sessionID string, opts session.GetOptions) ([]base.Message, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -50,7 +50,7 @@ func (s *FileStore) GetMessages(_ context.Context, sessionID string, opts sessio
 	if !ok {
 		return nil, session.ErrSessionNotFound
 	}
-	msgs := append([]provider.Message(nil), entry.Messages...)
+	msgs := append([]base.Message(nil), entry.Messages...)
 	if opts.MaxMessages > 0 {
 		policy := session.WindowPolicy{
 			MaxMessages:      opts.MaxMessages,
@@ -62,7 +62,7 @@ func (s *FileStore) GetMessages(_ context.Context, sessionID string, opts sessio
 }
 
 // AppendMessages appends messages and persists to disk.
-func (s *FileStore) AppendMessages(_ context.Context, sessionID string, msgs []provider.Message) error {
+func (s *FileStore) AppendMessages(_ context.Context, sessionID string, msgs []base.Message) error {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -149,7 +149,7 @@ func (s *FileStore) GetVersion(_ context.Context, sessionID string) (int64, erro
 }
 
 // AppendMessagesWithVersion appends messages with optimistic locking.
-func (s *FileStore) AppendMessagesWithVersion(_ context.Context, sessionID string, expectedVersion int64, msgs []provider.Message) (int64, error) {
+func (s *FileStore) AppendMessagesWithVersion(_ context.Context, sessionID string, expectedVersion int64, msgs []base.Message) (int64, error) {
 	if len(msgs) == 0 {
 		return expectedVersion, nil
 	}

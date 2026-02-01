@@ -157,8 +157,8 @@ func (m *Manager) RefreshOAuth(ctx context.Context, cred *Credential) error {
 		return fmt.Errorf("auth manager: refresh failed status %d", resp.StatusCode)
 	}
 	var payload struct {
-		AccessToken string `json:"access_token"`
-		ExpiresIn   int64  `json:"expires_in"`
+		AccessToken  string `json:"access_token"`
+		ExpiresIn    int64  `json:"expires_in"`
 		RefreshToken string `json:"refresh_token"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {

@@ -8,7 +8,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Michaelxwb/ai-api-sdk/provider"
+	"github.com/Michaelxwb/ai-api-sdk/provider/base"
 	"github.com/Michaelxwb/ai-api-sdk/session"
 	"github.com/go-sql-driver/mysql"
 )
@@ -94,7 +94,7 @@ func (s *MySQLStore) Close() error {
 
 // GetMessages retrieves message history for a session.
 // Implements session.SessionStore interface.
-func (s *MySQLStore) GetMessages(ctx context.Context, sessionID string, opts session.GetOptions) ([]provider.Message, error) {
+func (s *MySQLStore) GetMessages(ctx context.Context, sessionID string, opts session.GetOptions) ([]base.Message, error) {
 	query := `
 		SELECT role, content, name
 		FROM session_messages
@@ -127,9 +127,9 @@ func (s *MySQLStore) GetMessages(ctx context.Context, sessionID string, opts ses
 	}
 	defer rows.Close()
 
-	var messages []provider.Message
+	var messages []base.Message
 	for rows.Next() {
-		var msg provider.Message
+		var msg base.Message
 		var name sql.NullString
 
 		if err := rows.Scan(&msg.Role, &msg.Content, &name); err != nil {
@@ -160,7 +160,7 @@ func (s *MySQLStore) GetMessages(ctx context.Context, sessionID string, opts ses
 			// System prompt already first, do nothing
 		} else {
 			// Try to find system prompt in full history
-			var systemPrompt *provider.Message
+			var systemPrompt *base.Message
 			row := s.db.QueryRowContext(ctx, `
 				SELECT role, content, name
 				FROM session_messages
@@ -169,7 +169,7 @@ func (s *MySQLStore) GetMessages(ctx context.Context, sessionID string, opts ses
 				LIMIT 1
 			`, sessionID)
 
-			var msg provider.Message
+			var msg base.Message
 			var name sql.NullString
 			if err := row.Scan(&msg.Role, &msg.Content, &name); err == nil {
 				if name.Valid {
@@ -179,7 +179,7 @@ func (s *MySQLStore) GetMessages(ctx context.Context, sessionID string, opts ses
 			}
 
 			if systemPrompt != nil {
-				messages = append([]provider.Message{*systemPrompt}, messages...)
+				messages = append([]base.Message{*systemPrompt}, messages...)
 			}
 		}
 	}
@@ -189,7 +189,7 @@ func (s *MySQLStore) GetMessages(ctx context.Context, sessionID string, opts ses
 
 // AppendMessages adds new messages to a session.
 // Implements session.SessionStore interface.
-func (s *MySQLStore) AppendMessages(ctx context.Context, sessionID string, msgs []provider.Message) error {
+func (s *MySQLStore) AppendMessages(ctx context.Context, sessionID string, msgs []base.Message) error {
 	if len(msgs) == 0 {
 		return nil
 	}

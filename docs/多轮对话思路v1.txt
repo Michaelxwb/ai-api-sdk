@@ -50,9 +50,9 @@
 
 Phase 1 - 保持核心简单：
 // 核心保持无状态（已有）
-resp, _ := cli.Chat(ctx, "openai", provider.ChatRequest{
+resp, _ := cli.Chat(ctx, "openai", base.ChatRequest{
   Model:    "gpt-4",
-  Messages: []provider.Message{...}, // 调用方管理历史
+  Messages: []base.Message{...}, // 调用方管理历史
 })
 
 Phase 2 - 添加可选 Session 层：
@@ -79,7 +79,7 @@ package session
 
 import (
   "context"
-  "github.com/Michaelxwb/ai-api-sdk/provider"
+  "github.com/Michaelxwb/ai-api-sdk/provider/base"
   "github.com/Michaelxwb/ai-api-sdk/client"
 )
 
@@ -87,7 +87,7 @@ type Session struct {
   id       string
   provider string
   model    string
-  messages []provider.Message
+  messages []base.Message
   store    Store                // 可选持久化
   policy   TruncatePolicy       // Token 限制策略
 }
@@ -95,7 +95,7 @@ type Session struct {
 // 核心方法：自动管理历史
 func (s *Session) Chat(ctx context.Context, cli *client.Client, userMsg string) (string, error) {
   // 1. 追加用户消息
-  s.messages = append(s.messages, provider.Message{Role: "user", Content: userMsg})
+  s.messages = append(s.messages, base.Message{Role: "user", Content: userMsg})
 
   // 2. 应用截断策略（如果有）
   msgs := s.messages
@@ -104,7 +104,7 @@ func (s *Session) Chat(ctx context.Context, cli *client.Client, userMsg string) 
   }
 
   // 3. 调用无状态 API
-  resp, err := cli.Chat(ctx, s.provider, provider.ChatRequest{
+  resp, err := cli.Chat(ctx, s.provider, base.ChatRequest{
       Model:    s.model,
       Messages: msgs, // 传完整历史
   })
@@ -113,7 +113,7 @@ func (s *Session) Chat(ctx context.Context, cli *client.Client, userMsg string) 
   }
 
   // 4. 追加助手回复
-  s.messages = append(s.messages, provider.Message{Role: "assistant", Content: resp.Text})
+  s.messages = append(s.messages, base.Message{Role: "assistant", Content: resp.Text})
 
   // 5. 可选持久化
   if s.store != nil {
@@ -145,9 +145,9 @@ func Resume(ctx context.Context, store Store, id string) (*Session, error)
 使用示例对比
 
 // 场景 1：简单调用（无状态）
-resp, _ := cli.Chat(ctx, "openai", provider.ChatRequest{
+resp, _ := cli.Chat(ctx, "openai", base.ChatRequest{
   Model:    "gpt-4",
-  Messages: []provider.Message{{Role: "user", Content: "hello"}},
+  Messages: []base.Message{{Role: "user", Content: "hello"}},
 })
 
 // 场景 2：多轮对话（内存 Session）

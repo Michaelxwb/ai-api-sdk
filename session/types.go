@@ -3,11 +3,11 @@ package session
 import (
 	"time"
 
-	"github.com/Michaelxwb/ai-api-sdk/provider"
+	"github.com/Michaelxwb/ai-api-sdk/provider/base"
 )
 
-// Message is an alias to provider.Message for session storage.
-type Message = provider.Message
+// Message is an alias to base.Message for session storage.
+type Message = base.Message
 
 // SessionMeta carries basic session metadata.
 type SessionMeta struct {

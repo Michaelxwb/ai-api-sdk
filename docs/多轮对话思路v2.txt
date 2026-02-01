@@ -62,9 +62,9 @@ cli := client.NewClient(cfg, mgr)
 cli.SessionStore = store
 cli.SessionConfig.AutoCreate = true
 
-resp, _ := cli.ChatSession(ctx, "openai", "session-123", provider.ChatRequest{
+resp, _ := cli.ChatSession(ctx, "openai", "session-123", base.ChatRequest{
   Model: "gpt-4",
-  Messages: []provider.Message{{Role: "user", Content: "hello"}},
+  Messages: []base.Message{{Role: "user", Content: "hello"}},
 })
 
 // 场景 2：Redis 存储（生产环境）

@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -10,7 +9,7 @@ import (
 
 	"github.com/Michaelxwb/ai-api-sdk/auth"
 	"github.com/Michaelxwb/ai-api-sdk/config"
-	"github.com/Michaelxwb/ai-api-sdk/provider"
+	"github.com/Michaelxwb/ai-api-sdk/provider/base"
 	"github.com/Michaelxwb/ai-api-sdk/session"
 )
 
@@ -40,110 +39,45 @@ func NewClient(cfg *config.Config, mgr *auth.Manager) *Client {
 // ChatWith sends a request using caller-provided credential and provider config.
 // This is the primary interface for platform integration — the platform manages
 // credentials in its own database and passes them directly to the SDK.
-func (c *Client) ChatWith(ctx context.Context, cred *auth.Credential, pc *config.ProviderConfig, req provider.ChatRequest) (provider.ChatResponse, error) {
-	if pc == nil {
-		return provider.ChatResponse{}, errors.New("client: missing provider config")
-	}
-	specName := pc.Type
-	if specName == "" {
-		specName = pc.Name
-	}
-	spec, ok := provider.Get(specName)
-	if !ok {
-		return provider.ChatResponse{}, fmt.Errorf("client: provider spec %s not registered", specName)
-	}
-	baseURL := pc.BaseURL
-	if baseURL == "" {
-		baseURL = spec.DefaultBaseURL()
-	}
-
-	strategy := auth.NewStrategyFromCredential(cred)
-	if cred != nil {
-		if override, ok := spec.AuthStrategyOverride(cred); ok {
-			strategy = override
-		}
-	}
-
-	opts := provider.BuildOptions{
-		BaseURL:   baseURL,
-		Path:      pc.Path,
-		ExtraBody: pc.ExtraBody,
-		Headers:   pc.Headers,
-	}
-	httpReq, err := spec.BuildRequest(ctx, opts, req)
+func (c *Client) ChatWith(ctx context.Context, cred *auth.Credential, pc *config.ProviderConfig, req base.ChatRequest) (base.ChatResponse, error) {
+	prep, err := c.prepareChatWithRequest(ctx, cred, pc, req)
 	if err != nil {
-		return provider.ChatResponse{}, err
-	}
-	for k, v := range pc.Headers {
-		httpReq.Header.Set(k, v)
+		return base.ChatResponse{}, err
 	}
 
 	transport := &AuthTransport{
 		Base:     c.HTTP.Transport,
-		Strategy: strategy,
-		Cred:     cred,
+		Strategy: prep.strategy,
+		Cred:     prep.cred,
 	}
 	httpClient := &http.Client{Transport: transport, Timeout: c.HTTP.Timeout}
-	resp, err := httpClient.Do(httpReq)
+	resp, err := httpClient.Do(prep.httpReq)
 	if err != nil {
-		return provider.ChatResponse{}, err
+		return base.ChatResponse{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		data, _ := io.ReadAll(resp.Body)
-		return provider.ChatResponse{}, fmt.Errorf("client: status %d: %s", resp.StatusCode, string(data))
+		return base.ChatResponse{}, fmt.Errorf("client: status %d: %s", resp.StatusCode, string(data))
 	}
-	return spec.ParseResponse(resp)
+	return prep.spec.ParseResponse(resp)
 }
 
 // Chat sends a request using local config.yaml and auth manager.
 // Suitable for CLI tools and standalone usage.
-func (c *Client) Chat(ctx context.Context, providerName string, req provider.ChatRequest) (provider.ChatResponse, error) {
-	if c == nil || c.Config == nil {
-		return provider.ChatResponse{}, errors.New("client: missing config")
+func (c *Client) Chat(ctx context.Context, providerName string, req base.ChatRequest) (base.ChatResponse, error) {
+	resolved, err := c.resolveChatInputs(providerName)
+	if err != nil {
+		return base.ChatResponse{}, err
 	}
-	pc := c.Config.FindProvider(providerName)
-	if pc == nil {
-		return provider.ChatResponse{}, fmt.Errorf("client: provider %s not configured", providerName)
-	}
-	specName := pc.Type
-	if specName == "" {
-		specName = pc.Name
-	}
-	spec, ok := provider.Get(specName)
-	if !ok {
-		return provider.ChatResponse{}, fmt.Errorf("client: provider spec %s not registered", specName)
-	}
+	pc := resolved.pc
+	spec := resolved.spec
+
 	baseURL := pc.BaseURL
 	if baseURL == "" {
 		baseURL = spec.DefaultBaseURL()
 	}
-
-	var cred *auth.Credential
-	var strategy auth.AuthStrategy
-	if c.AuthMgr != nil {
-		if pc.AuthRef != "" {
-			var err error
-			cred, err = c.AuthMgr.Get(pc.AuthRef)
-			if err != nil {
-				return provider.ChatResponse{}, err
-			}
-			strategy = auth.NewStrategyFromCredential(cred)
-		} else {
-			var err error
-			cred, strategy, err = c.AuthMgr.Resolve(spec.Name())
-			if err != nil {
-				return provider.ChatResponse{}, err
-			}
-		}
-	}
-	if cred != nil {
-		if override, ok := spec.AuthStrategyOverride(cred); ok {
-			strategy = override
-		}
-	}
-
-	opts := provider.BuildOptions{
+	opts := base.BuildOptions{
 		BaseURL:   baseURL,
 		Path:      pc.Path,
 		ExtraBody: pc.ExtraBody,
@@ -151,7 +85,7 @@ func (c *Client) Chat(ctx context.Context, providerName string, req provider.Cha
 	}
 	httpReq, err := spec.BuildRequest(ctx, opts, req)
 	if err != nil {
-		return provider.ChatResponse{}, err
+		return base.ChatResponse{}, err
 	}
 	for k, v := range pc.Headers {
 		httpReq.Header.Set(k, v)
@@ -159,28 +93,28 @@ func (c *Client) Chat(ctx context.Context, providerName string, req provider.Cha
 
 	transport := &AuthTransport{
 		Base:     c.HTTP.Transport,
-		Strategy: strategy,
+		Strategy: resolved.strategy,
 		Manager:  c.AuthMgr,
-		Cred:     cred,
+		Cred:     resolved.cred,
 	}
 	httpClient := &http.Client{Transport: transport, Timeout: c.HTTP.Timeout}
 	resp, err := httpClient.Do(httpReq)
 	if err != nil {
-		if c.AuthMgr != nil && cred != nil {
-			c.AuthMgr.MarkFailed(cred.ID)
+		if c.AuthMgr != nil && resolved.cred != nil {
+			c.AuthMgr.MarkFailed(resolved.cred.ID)
 		}
-		return provider.ChatResponse{}, err
+		return base.ChatResponse{}, err
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		data, _ := io.ReadAll(resp.Body)
-		if c.AuthMgr != nil && cred != nil {
-			c.AuthMgr.MarkFailed(cred.ID)
+		if c.AuthMgr != nil && resolved.cred != nil {
+			c.AuthMgr.MarkFailed(resolved.cred.ID)
 		}
-		return provider.ChatResponse{}, fmt.Errorf("client: status %d: %s", resp.StatusCode, string(data))
+		return base.ChatResponse{}, fmt.Errorf("client: status %d: %s", resp.StatusCode, string(data))
 	}
-	if c.AuthMgr != nil && cred != nil {
-		c.AuthMgr.MarkSuccess(cred.ID)
+	if c.AuthMgr != nil && resolved.cred != nil {
+		c.AuthMgr.MarkSuccess(resolved.cred.ID)
 	}
 	return spec.ParseResponse(resp)
 }

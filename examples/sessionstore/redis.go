@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/Michaelxwb/ai-api-sdk/provider"
+	"github.com/Michaelxwb/ai-api-sdk/provider/base"
 	"github.com/Michaelxwb/ai-api-sdk/session"
 	"github.com/redis/go-redis/v9"
 )
@@ -29,7 +29,7 @@ func NewRedisStore(rdb *redis.Client, ttl time.Duration) *RedisStore {
 }
 
 // GetMessages retrieves message history for a session.
-func (s *RedisStore) GetMessages(ctx context.Context, sessionID string, opts session.GetOptions) ([]provider.Message, error) {
+func (s *RedisStore) GetMessages(ctx context.Context, sessionID string, opts session.GetOptions) ([]base.Message, error) {
 	key := s.messagesKey(sessionID)
 
 	start, stop := int64(0), int64(-1)
@@ -46,9 +46,9 @@ func (s *RedisStore) GetMessages(ctx context.Context, sessionID string, opts ses
 		return nil, session.ErrSessionNotFound
 	}
 
-	msgs := make([]provider.Message, 0, len(items))
+	msgs := make([]base.Message, 0, len(items))
 	for _, item := range items {
-		var msg provider.Message
+		var msg base.Message
 		if err := json.Unmarshal([]byte(item), &msg); err != nil {
 			return nil, err
 		}
@@ -67,7 +67,7 @@ func (s *RedisStore) GetMessages(ctx context.Context, sessionID string, opts ses
 }
 
 // AppendMessages appends messages to a session.
-func (s *RedisStore) AppendMessages(ctx context.Context, sessionID string, msgs []provider.Message) error {
+func (s *RedisStore) AppendMessages(ctx context.Context, sessionID string, msgs []base.Message) error {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -174,7 +174,7 @@ func (s *RedisStore) GetVersion(ctx context.Context, sessionID string) (int64, e
 }
 
 // AppendMessagesWithVersion appends messages with optimistic locking.
-func (s *RedisStore) AppendMessagesWithVersion(ctx context.Context, sessionID string, expectedVersion int64, msgs []provider.Message) (int64, error) {
+func (s *RedisStore) AppendMessagesWithVersion(ctx context.Context, sessionID string, expectedVersion int64, msgs []base.Message) (int64, error) {
 	if len(msgs) == 0 {
 		return expectedVersion, nil
 	}

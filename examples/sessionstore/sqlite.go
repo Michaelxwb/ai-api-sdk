@@ -7,7 +7,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/Michaelxwb/ai-api-sdk/provider"
+	"github.com/Michaelxwb/ai-api-sdk/provider/base"
 	"github.com/Michaelxwb/ai-api-sdk/session"
 	_ "github.com/mattn/go-sqlite3"
 )
@@ -83,7 +83,7 @@ func (s *SQLiteStore) Close() error {
 
 // GetMessages retrieves message history for a session.
 // Implements session.SessionStore interface.
-func (s *SQLiteStore) GetMessages(ctx context.Context, sessionID string, opts session.GetOptions) ([]provider.Message, error) {
+func (s *SQLiteStore) GetMessages(ctx context.Context, sessionID string, opts session.GetOptions) ([]base.Message, error) {
 	query := `
 		SELECT role, content, name
 		FROM session_messages
@@ -116,9 +116,9 @@ func (s *SQLiteStore) GetMessages(ctx context.Context, sessionID string, opts se
 	}
 	defer rows.Close()
 
-	var messages []provider.Message
+	var messages []base.Message
 	for rows.Next() {
-		var msg provider.Message
+		var msg base.Message
 		var name sql.NullString
 
 		if err := rows.Scan(&msg.Role, &msg.Content, &name); err != nil {
@@ -152,7 +152,7 @@ func (s *SQLiteStore) GetMessages(ctx context.Context, sessionID string, opts se
 
 // AppendMessages appends new messages to a session.
 // Implements session.SessionStore interface.
-func (s *SQLiteStore) AppendMessages(ctx context.Context, sessionID string, msgs []provider.Message) error {
+func (s *SQLiteStore) AppendMessages(ctx context.Context, sessionID string, msgs []base.Message) error {
 	if len(msgs) == 0 {
 		return nil
 	}

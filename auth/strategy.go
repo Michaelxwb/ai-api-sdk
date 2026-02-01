@@ -100,11 +100,11 @@ func (s OAuthStrategy) Apply(req *http.Request) error {
 // JWTSignStrategy builds a short-lived JWT and injects it as Authorization: Bearer <jwt>.
 // Expected metadata keys: jwt_issuer, jwt_subject, jwt_audience, jwt_secret, jwt_exp_seconds.
 type JWTSignStrategy struct {
-	Issuer      string
-	Subject     string
-	Audience    string
-	Secret      string
-	ExpSeconds  int64
+	Issuer     string
+	Subject    string
+	Audience   string
+	Secret     string
+	ExpSeconds int64
 }
 
 func (s JWTSignStrategy) Apply(req *http.Request) error {

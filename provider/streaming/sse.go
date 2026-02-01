@@ -1,0 +1,131 @@
+package streaming
+
+import (
+	"bufio"
+	"context"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
+)
+
+// SSEParser is a generic Server-Sent Events parser.
+type SSEParser struct {
+	Config StreamConfig
+}
+
+// Parse parses an SSE stream into chunks.
+func (p *SSEParser) Parse(
+	ctx context.Context,
+	resp *http.Response,
+	extractor DeltaExtractor,
+) (<-chan StreamChunk, error) {
+	if resp == nil {
+		return nil, fmt.Errorf("sse: response is nil")
+	}
+	if extractor == nil {
+		return nil, fmt.Errorf("sse: extractor is nil")
+	}
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	out := make(chan StreamChunk, 16)
+	go func() {
+		defer close(out)
+		defer func() { _ = resp.Body.Close() }()
+
+		reader := bufio.NewReader(resp.Body)
+		var currentEvent string
+		dataLines := make([]string, 0, 4)
+
+		for {
+			select {
+			case <-ctx.Done():
+				sendStreamChunk(out, ctx, StreamChunk{Error: ctx.Err()})
+				return
+			default:
+			}
+
+			line, err := reader.ReadString('\n')
+			if err != nil {
+				if err == io.EOF {
+					if line != "" {
+						p.processLine(line, &currentEvent, &dataLines)
+					}
+					if len(dataLines) > 0 {
+						if p.handleEvent(ctx, out, currentEvent, dataLines, extractor) {
+							return
+						}
+					}
+					return
+				}
+				sendStreamChunk(out, ctx, StreamChunk{Error: err})
+				return
+			}
+
+			if p.processLine(line, &currentEvent, &dataLines) {
+				if len(dataLines) > 0 {
+					if p.handleEvent(ctx, out, currentEvent, dataLines, extractor) {
+						return
+					}
+				}
+				dataLines = dataLines[:0]
+				currentEvent = ""
+			}
+		}
+	}()
+
+	return out, nil
+}
+
+func (p *SSEParser) processLine(line string, currentEvent *string, dataLines *[]string) bool {
+	trimmed := strings.TrimRight(line, "\r\n")
+	if trimmed == "" {
+		return true
+	}
+	if strings.HasPrefix(trimmed, "event:") {
+		*currentEvent = sseFieldValue(trimmed, "event:")
+		return false
+	}
+	if strings.HasPrefix(trimmed, "data:") {
+		*dataLines = append(*dataLines, sseFieldValue(trimmed, "data:"))
+		return false
+	}
+	return false
+}
+
+func sseFieldValue(line, prefix string) string {
+	value := strings.TrimPrefix(line, prefix)
+	if len(value) > 0 && value[0] == ' ' {
+		value = value[1:]
+	}
+	return value
+}
+
+func (p *SSEParser) handleEvent(
+	ctx context.Context,
+	out chan<- StreamChunk,
+	event string,
+	dataLines []string,
+	extractor DeltaExtractor,
+) bool {
+	if len(p.Config.EventFilter) > 0 && !p.Config.EventFilter[event] {
+		return false
+	}
+
+	data := strings.Join(dataLines, "\n")
+	if p.Config.DoneMarker != "" && data == p.Config.DoneMarker {
+		sendStreamChunk(out, ctx, StreamChunk{Done: true, Raw: []byte(data)})
+		return true
+	}
+
+	text, done, err := extractor(event, []byte(data))
+	if err != nil {
+		sendStreamChunk(out, ctx, StreamChunk{Error: err})
+		return true
+	}
+
+	sendStreamChunk(out, ctx, StreamChunk{Text: text, Done: done, Raw: []byte(data)})
+	return done
+}
