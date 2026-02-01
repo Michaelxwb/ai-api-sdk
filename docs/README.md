@@ -21,6 +21,10 @@
 - [Session API](session-api.md) - Session 接口详细说明
 - [流式迁移指南](migration-to-streaming.md) - 升级到流式优先架构
 
+### 扩展开发
+- [自定义网关配置指南](custom-gateway-guide.md) - 非标准模型接入、认证方式、数据库表结构
+- [配置生成器使用指南](config-generator-usage.md) - 自动生成平台配置的工具
+
 ### 开发者文档
 - [Session 实现细节](internal/session-implementation.md) - 内部实现（开发者）
 
@@ -29,6 +33,8 @@
 ### 我想...
 - **快速接入一个 AI 模型** → [快速开始](quickstart.md)
 - **配置多个 Provider** → [配置指南](configuration.md)
+- **接入自定义网关/非标准 AI 模型** → [自定义网关配置指南](custom-gateway-guide.md)
+- **自动生成平台配置** → [配置生成器使用指南](config-generator-usage.md)
 - **实现多轮对话** → [Session 教程](session-tutorial.md)
 - **使用数据库存储会话** → [数据库存储](session-database.md)
 - **实现流式输出（打字机效果）** → [使用指南 - 流式对话](usage-guide.md#流式对话)

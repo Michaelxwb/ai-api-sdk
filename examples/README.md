@@ -38,6 +38,34 @@
 - [09-connectivity-test/basic](../examples/09-connectivity-test/basic/) - 基础测试（YAML 配置）
 - [09-connectivity-test/programmatic](../examples/09-connectivity-test/programmatic/) - 代码构建凭证测试
 
+## 运行示例前的准备
+
+### 基础示例（无需额外依赖）
+- 01-quickstart
+- 02-streaming
+- 03-programmatic-auth
+- 04-session-memory
+- 05-session-file
+- 09-connectivity-test
+- 10-custom-provider-huggingface
+
+### 需要数据库驱动的示例
+
+#### SQLite 示例
+```bash
+CGO_ENABLED=1 go run examples/06-session-sqlite/basic/main.go
+```
+
+#### PostgreSQL 示例
+```bash
+go run examples/07-session-postgres/basic/main.go
+```
+
+#### MySQL 示例
+```bash
+go run examples/08-session-mysql/basic/main.go
+```
+
 ## 运行方式
 
 1. 在 `config.example.yaml` 中填入真实凭证与 Provider 端点。
@@ -76,6 +104,7 @@ go run main.go
 - SQLite：需要 CGO（用于 `github.com/mattn/go-sqlite3`）
 - PostgreSQL：需要正在运行的数据库和有效的连接字符串
 - MySQL：需要正在运行的数据库和有效的 DSN
+- Redis：需要 Redis 实例
 
 ## 备注
 
