@@ -55,6 +55,9 @@ func (s *DifySpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req
 	if req.Stream {
 		payload["response_mode"] = "streaming"
 	}
+	// Dify 的 conversation_id 由服务端管理：
+	// 仅当客户端明确拿到会话 ID（从响应中获取）时才传递。
+	// 首次对话不传入，让 Dify 生成新的会话 ID。
 	if req.SessionID != "" {
 		payload["conversation_id"] = req.SessionID
 	}
@@ -65,7 +68,7 @@ func (s *DifySpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req
 
 	body, err := json.Marshal(payload)
 	if err != nil {
-		return nil, fmt.Errorf("dify: 序列化请求体失败: %w", err)
+		return nil, fmt.Errorf("dify: serialization request body failed: %w", err)
 	}
 
 	path := "/chat-messages"
@@ -76,7 +79,7 @@ func (s *DifySpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req
 
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return nil, fmt.Errorf("dify: 创建请求失败: %w", err)
+		return nil, fmt.Errorf("dify: request creation failed: %w", err)
 	}
 	if req.Stream {
 		httpReq.Header.Set("Accept", "text/event-stream")
@@ -87,11 +90,11 @@ func (s *DifySpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req
 
 func (s *DifySpec) ParseResponse(resp *http.Response) (base.ChatResponse, error) {
 	if resp == nil {
-		return base.ChatResponse{}, fmt.Errorf("dify: 响应为空")
+		return base.ChatResponse{}, fmt.Errorf("dify: response is nil")
 	}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return base.ChatResponse{}, fmt.Errorf("dify: 读取响应失败: %w", err)
+		return base.ChatResponse{}, fmt.Errorf("dify: read response failed: %w", err)
 	}
 
 	var result struct {
@@ -109,7 +112,7 @@ func (s *DifySpec) ParseResponse(resp *http.Response) (base.ChatResponse, error)
 	}
 
 	if err := json.Unmarshal(data, &result); err != nil {
-		return base.ChatResponse{}, fmt.Errorf("dify: 解析响应失败: %w", err)
+		return base.ChatResponse{}, fmt.Errorf("dify: response parsing failed: %w", err)
 	}
 
 	chatResp := base.ChatResponse{

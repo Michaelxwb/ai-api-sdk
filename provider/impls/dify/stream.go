@@ -20,7 +20,7 @@ type DifyStreamSpec struct {
 
 func (s *DifyStreamSpec) ParseStreamResponse(resp *http.Response) (<-chan streaming.StreamChunk, error) {
 	if resp == nil {
-		return nil, fmt.Errorf("dify: 流式响应为空")
+		return nil, fmt.Errorf("dify: response is nil")
 	}
 
 	ctx := streaming.StreamContext(resp)
@@ -59,7 +59,8 @@ func (s *DifyStreamSpec) ParseStreamResponse(resp *http.Response) (<-chan stream
 					}
 					return
 				}
-				sendStreamChunk(ctx, out, streaming.StreamChunk{Error: fmt.Errorf("dify: 读取流失败: %w", err), Done: true})
+				sendStreamChunk(ctx, out, streaming.StreamChunk{Error: fmt.Errorf(
+					"dify: stream read failed: %w", err), Done: true})
 				return
 			}
 
@@ -126,7 +127,8 @@ func handleDifyEvent(ctx context.Context, out chan<- streaming.StreamChunk, data
 	}
 
 	if err := json.Unmarshal([]byte(data), &event); err != nil {
-		sendStreamChunk(ctx, out, streaming.StreamChunk{Error: fmt.Errorf("dify: 解析流事件失败: %w", err), Done: true, Raw: []byte(data)})
+		sendStreamChunk(ctx, out, streaming.StreamChunk{Error: fmt.Errorf(
+			"dify: stream parsing failed: %w", err), Done: true, Raw: []byte(data)})
 		return true
 	}
 
@@ -153,7 +155,7 @@ func handleDifyEvent(ctx context.Context, out chan<- streaming.StreamChunk, data
 	case "error":
 		msg := event.Message
 		if msg == "" {
-			msg = "dify: 流式返回错误事件"
+			msg = "dify: streaming error events"
 		}
 		sendStreamChunk(ctx, out, streaming.StreamChunk{Error: fmt.Errorf("%s", msg), Done: true, Raw: []byte(data)})
 		return true
