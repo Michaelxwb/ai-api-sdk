@@ -393,7 +393,7 @@ const markdownTemplate = "# {{ .PlatformName }} 平台配置文档\n\n" +
 	"    // 创建客户端\n" +
 	"    cli := client.NewClient(cfg, mgr)\n\n" +
 	"    // 发起请求\n" +
-	"    resp, _ := cli.Chat(context.Background(), \"{{ .ProviderName }}\", base.ChatRequest{\n" +
+	"    resp, _ := cli.NewSession(\"{{ .ProviderName }}\").Chat(context.Background(), base.ChatRequest{\n" +
 	"        Model: \"{{ .DefaultModel }}\",\n" +
 	"        Messages: []base.Message{\n" +
 	"            {Role: \"user\", Content: \"测试\"},\n" +

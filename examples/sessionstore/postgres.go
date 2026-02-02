@@ -13,7 +13,7 @@ import (
 	_ "github.com/lib/pq"
 )
 
-// PostgresStore implements session.SessionStore using PostgreSQL database.
+// PostgresStore implements session.LegacySessionStore using PostgreSQL database.
 // Suitable for production deployments with high availability requirements.
 //
 // Features:
@@ -92,7 +92,7 @@ func (s *PostgresStore) Close() error {
 }
 
 // GetMessages retrieves message history for a session.
-// Implements session.SessionStore interface.
+// Implements session.LegacySessionStore interface.
 func (s *PostgresStore) GetMessages(ctx context.Context, sessionID string, opts session.GetOptions) ([]base.Message, error) {
 	query := `
 		SELECT role, content, name
@@ -187,7 +187,7 @@ func (s *PostgresStore) GetMessages(ctx context.Context, sessionID string, opts 
 }
 
 // AppendMessages adds new messages to a session.
-// Implements session.SessionStore interface.
+// Implements session.LegacySessionStore interface.
 func (s *PostgresStore) AppendMessages(ctx context.Context, sessionID string, msgs []base.Message) error {
 	if len(msgs) == 0 {
 		return nil

@@ -13,7 +13,7 @@ import (
 	"github.com/go-sql-driver/mysql"
 )
 
-// MySQLStore implements session.SessionStore using MySQL database.
+// MySQLStore implements session.LegacySessionStore using MySQL database.
 // Suitable for production deployments requiring proven relational database.
 //
 // Features:
@@ -93,7 +93,7 @@ func (s *MySQLStore) Close() error {
 }
 
 // GetMessages retrieves message history for a session.
-// Implements session.SessionStore interface.
+// Implements session.LegacySessionStore interface.
 func (s *MySQLStore) GetMessages(ctx context.Context, sessionID string, opts session.GetOptions) ([]base.Message, error) {
 	query := `
 		SELECT role, content, name
@@ -188,7 +188,7 @@ func (s *MySQLStore) GetMessages(ctx context.Context, sessionID string, opts ses
 }
 
 // AppendMessages adds new messages to a session.
-// Implements session.SessionStore interface.
+// Implements session.LegacySessionStore interface.
 func (s *MySQLStore) AppendMessages(ctx context.Context, sessionID string, msgs []base.Message) error {
 	if len(msgs) == 0 {
 		return nil

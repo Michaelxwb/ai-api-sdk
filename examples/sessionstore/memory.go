@@ -171,7 +171,7 @@ func (s *MemoryStore) AppendMessagesWithVersion(_ context.Context, sessionID str
 }
 
 var (
-	_ session.SessionStore              = (*MemoryStore)(nil)
+	_ session.LegacySessionStore        = (*MemoryStore)(nil)
 	_ session.SessionStoreWithLifecycle = (*MemoryStore)(nil)
 	_ session.SessionStoreWithMeta      = (*MemoryStore)(nil)
 	_ session.SessionStoreWithVersion   = (*MemoryStore)(nil)

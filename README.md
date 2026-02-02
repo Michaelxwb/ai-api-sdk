@@ -16,7 +16,7 @@
 go get github.com/Michaelxwb/ai-api-sdk
 ```
 
-**注意**：SDK 包含数据库驱动依赖（SQLite、PostgreSQL、MySQL、Redis），但仅在使用对应存储时才会编译进二进制。如果只使用内存或文件存储，这些依赖不会影响最终二进制大小。
+**注意**：数据库驱动依赖（SQLite、PostgreSQL、MySQL、Redis）仅在 `examples/sessionstore` 的参考实现中使用，核心 SDK 仅定义接口，不包含具体存储实现。使用哪些驱动由业务侧自行决定。
 
 ## 快速开始
 
@@ -44,7 +44,7 @@ func main() {
 
     cli := client.NewClient(cfg, mgr)
 
-    resp, err := cli.ChatStreamSync(context.Background(), "openai", base.ChatRequest{
+    resp, err := cli.NewSession("openai").Chat(context.Background(), base.ChatRequest{
         Model:    "gpt-4",
         Messages: []base.Message{{Role: "user", Content: "Hello!"}},
     })
@@ -55,6 +55,14 @@ func main() {
     fmt.Println(resp.Text)
 }
 ```
+
+## SessionStore 使用说明
+
+SDK 只提供 SessionStore 接口与数据结构：
+- `session.SessionStore` - 核心接口
+- `session.SessionState` - 会话数据结构
+
+具体存储实现由业务层提供，可参考 `examples/sessionstore/` 中的实现（Memory/File/SQLite/MySQL/PostgreSQL/Redis），或直接自定义实现。
 
 ## 项目结构
 

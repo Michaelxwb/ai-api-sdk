@@ -25,21 +25,66 @@ type Client struct {
 	SessionConfig SessionConfig
 }
 
-// New creates a lightweight client for platform integration (ChatWith mode).
+// New creates a lightweight client for platform integration (Session API).
 func New() *Client {
 	return &Client{HTTP: &http.Client{Timeout: 60 * time.Second}}
 }
 
-// NewClient creates a client with local config and auth manager (Chat mode).
+// NewClient creates a client with local config and auth manager (Session mode).
 func NewClient(cfg *config.Config, mgr *auth.Manager) *Client {
 	httpClient := &http.Client{Timeout: 60 * time.Second}
 	return &Client{HTTP: httpClient, AuthMgr: mgr, Config: cfg}
 }
 
-// ChatWith sends a request using caller-provided credential and provider config.
-// This is the primary interface for platform integration — the platform manages
-// credentials in its own database and passes them directly to the SDK.
-func (c *Client) ChatWith(ctx context.Context, cred *auth.Credential, pc *config.ProviderConfig, req base.ChatRequest) (base.ChatResponse, error) {
+// NewSession 创建新会话
+func (c *Client) NewSession(provider string, opts ...SessionOption) *Session {
+	sess := &Session{
+		client:   c,
+		provider: provider,
+		mode:     HistoryAuto, // 默认自动加载历史
+		store:    c.SessionStore,
+	}
+
+	for _, opt := range opts {
+		opt(sess)
+	}
+
+	return sess
+}
+
+// NewSessionWith creates a session using caller-provided credential and provider config.
+// This is designed for platform integration where credentials are managed externally.
+func (c *Client) NewSessionWith(cred *auth.Credential, pc *config.ProviderConfig, opts ...SessionOption) *Session {
+	provider := ""
+	if pc != nil {
+		if pc.Name != "" {
+			provider = pc.Name
+		} else if pc.Type != "" {
+			provider = pc.Type
+		}
+	}
+	if provider == "" && cred != nil {
+		provider = cred.Provider
+	}
+
+	sess := &Session{
+		client:   c,
+		provider: provider,
+		cred:     cred,
+		pc:       pc,
+		mode:     HistoryAuto,
+		store:    c.SessionStore,
+	}
+
+	for _, opt := range opts {
+		opt(sess)
+	}
+
+	return sess
+}
+
+// chatWith 内部实现方法（仅供Session.Chat使用，业务层请使用Session API）
+func (c *Client) chatWith(ctx context.Context, cred *auth.Credential, pc *config.ProviderConfig, req base.ChatRequest) (base.ChatResponse, error) {
 	prep, err := c.prepareChatWithRequest(ctx, cred, pc, req)
 	if err != nil {
 		return base.ChatResponse{}, err
@@ -61,60 +106,4 @@ func (c *Client) ChatWith(ctx context.Context, cred *auth.Credential, pc *config
 		return base.ChatResponse{}, fmt.Errorf("client: status %d: %s", resp.StatusCode, string(data))
 	}
 	return prep.spec.ParseResponse(resp)
-}
-
-// Chat sends a request using local config.yaml and auth manager.
-// Suitable for CLI tools and standalone usage.
-func (c *Client) Chat(ctx context.Context, providerName string, req base.ChatRequest) (base.ChatResponse, error) {
-	resolved, err := c.resolveChatInputs(providerName)
-	if err != nil {
-		return base.ChatResponse{}, err
-	}
-	pc := resolved.pc
-	spec := resolved.spec
-
-	baseURL := pc.BaseURL
-	if baseURL == "" {
-		baseURL = spec.DefaultBaseURL()
-	}
-	opts := base.BuildOptions{
-		BaseURL:   baseURL,
-		Path:      pc.Path,
-		ExtraBody: pc.ExtraBody,
-		Headers:   pc.Headers,
-	}
-	httpReq, err := spec.BuildRequest(ctx, opts, req)
-	if err != nil {
-		return base.ChatResponse{}, err
-	}
-	for k, v := range pc.Headers {
-		httpReq.Header.Set(k, v)
-	}
-
-	transport := &AuthTransport{
-		Base:     c.HTTP.Transport,
-		Strategy: resolved.strategy,
-		Manager:  c.AuthMgr,
-		Cred:     resolved.cred,
-	}
-	httpClient := &http.Client{Transport: transport, Timeout: c.HTTP.Timeout}
-	resp, err := httpClient.Do(httpReq)
-	if err != nil {
-		if c.AuthMgr != nil && resolved.cred != nil {
-			c.AuthMgr.MarkFailed(resolved.cred.ID)
-		}
-		return base.ChatResponse{}, err
-	}
-	defer func() { _ = resp.Body.Close() }()
-	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		data, _ := io.ReadAll(resp.Body)
-		if c.AuthMgr != nil && resolved.cred != nil {
-			c.AuthMgr.MarkFailed(resolved.cred.ID)
-		}
-		return base.ChatResponse{}, fmt.Errorf("client: status %d: %s", resp.StatusCode, string(data))
-	}
-	if c.AuthMgr != nil && resolved.cred != nil {
-		c.AuthMgr.MarkSuccess(resolved.cred.ID)
-	}
-	return spec.ParseResponse(resp)
 }

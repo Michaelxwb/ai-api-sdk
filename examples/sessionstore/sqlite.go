@@ -12,7 +12,7 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// SQLiteStore implements session.SessionStore using SQLite database.
+// SQLiteStore implements session.LegacySessionStore using SQLite database.
 // It's ideal for single-machine deployments and local persistence.
 //
 // Features:
@@ -82,7 +82,7 @@ func (s *SQLiteStore) Close() error {
 }
 
 // GetMessages retrieves message history for a session.
-// Implements session.SessionStore interface.
+// Implements session.LegacySessionStore interface.
 func (s *SQLiteStore) GetMessages(ctx context.Context, sessionID string, opts session.GetOptions) ([]base.Message, error) {
 	query := `
 		SELECT role, content, name
@@ -151,7 +151,7 @@ func (s *SQLiteStore) GetMessages(ctx context.Context, sessionID string, opts se
 }
 
 // AppendMessages appends new messages to a session.
-// Implements session.SessionStore interface.
+// Implements session.LegacySessionStore interface.
 func (s *SQLiteStore) AppendMessages(ctx context.Context, sessionID string, msgs []base.Message) error {
 	if len(msgs) == 0 {
 		return nil
@@ -344,7 +344,7 @@ func (s *SQLiteStore) CleanupOldSessions(ctx context.Context, olderThan time.Dur
 
 // Verify interface compliance at compile time
 var (
-	_ session.SessionStore              = (*SQLiteStore)(nil)
+	_ session.LegacySessionStore        = (*SQLiteStore)(nil)
 	_ session.SessionStoreWithLifecycle = (*SQLiteStore)(nil)
 	_ session.SessionStoreWithMeta      = (*SQLiteStore)(nil)
 )

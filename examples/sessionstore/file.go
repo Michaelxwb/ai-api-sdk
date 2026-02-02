@@ -221,7 +221,7 @@ func (s *FileStore) save() error {
 }
 
 var (
-	_ session.SessionStore              = (*FileStore)(nil)
+	_ session.LegacySessionStore        = (*FileStore)(nil)
 	_ session.SessionStoreWithLifecycle = (*FileStore)(nil)
 	_ session.SessionStoreWithMeta      = (*FileStore)(nil)
 	_ session.SessionStoreWithVersion   = (*FileStore)(nil)

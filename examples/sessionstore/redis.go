@@ -241,7 +241,7 @@ func (s *RedisStore) versionKey(sessionID string) string {
 }
 
 var (
-	_ session.SessionStore              = (*RedisStore)(nil)
+	_ session.LegacySessionStore        = (*RedisStore)(nil)
 	_ session.SessionStoreWithLifecycle = (*RedisStore)(nil)
 	_ session.SessionStoreWithMeta      = (*RedisStore)(nil)
 	_ session.SessionStoreWithVersion   = (*RedisStore)(nil)
