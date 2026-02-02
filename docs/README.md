@@ -23,6 +23,7 @@
 
 ### 扩展开发
 - [自定义网关配置指南](custom-gateway-guide.md) - 非标准模型接入、认证方式、数据库表结构
+- [自定义认证与签名指南](custom-auth-guide.md) - 非标准认证与签名扩展
 - [配置生成器使用指南](config-generator-usage.md) - 自动生成平台配置的工具
 
 ### 开发者文档

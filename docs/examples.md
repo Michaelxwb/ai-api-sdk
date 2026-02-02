@@ -12,6 +12,8 @@
 - [01-quickstart](../examples/01-quickstart/) - 最简单示例
 - [02-streaming](../examples/02-streaming/) - 流式对话
 - [03-programmatic-auth](../examples/03-programmatic-auth/) - 代码构建凭证
+- [dify](../examples/dify/) - Dify 平台示例（非流式/流式）
+- [qwen-signature](../examples/qwen-signature/) - 非标准认证模板
 
 ### 多轮对话
 - [04-session-memory](../examples/04-session-memory/) - 内存存储

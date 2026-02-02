@@ -95,6 +95,7 @@ func (c *Client) ChatSessionStream(ctx context.Context, providerName, sessionID 
 
 	newReq := req
 	newReq.Messages = merged
+	newReq.SessionID = sessionID
 
 	stream, err := c.ChatStream(ctx, providerName, newReq)
 	if err != nil {
@@ -175,26 +176,42 @@ func (c *Client) ChatSessionStreamSync(ctx context.Context, providerName, sessio
 
 func collectStream(stream <-chan streaming.StreamChunk) (base.ChatResponse, error) {
 	var fullText string
+	var sessionID string
+	var usage *base.Usage
 	for chunk := range stream {
 		if chunk.Error != nil {
 			return base.ChatResponse{}, chunk.Error
 		}
 		fullText += chunk.Text
+		if chunk.SessionID != "" {
+			sessionID = chunk.SessionID
+		}
+		if chunk.Usage != nil {
+			usage = chunk.Usage
+		}
 	}
-	return base.ChatResponse{Text: fullText}, nil
+	return base.ChatResponse{Text: fullText, SessionID: sessionID, Usage: usage}, nil
 }
 
 func collectStreamWithPartial(stream <-chan streaming.StreamChunk) (base.ChatResponse, error) {
 	var fullText string
+	var sessionID string
+	var usage *base.Usage
 	for chunk := range stream {
 		if chunk.Text != "" {
 			fullText += chunk.Text
 		}
+		if chunk.SessionID != "" {
+			sessionID = chunk.SessionID
+		}
+		if chunk.Usage != nil {
+			usage = chunk.Usage
+		}
 		if chunk.Error != nil {
-			return base.ChatResponse{Text: fullText}, chunk.Error
+			return base.ChatResponse{Text: fullText, SessionID: sessionID, Usage: usage}, chunk.Error
 		}
 	}
-	return base.ChatResponse{Text: fullText}, nil
+	return base.ChatResponse{Text: fullText, SessionID: sessionID, Usage: usage}, nil
 }
 
 func sendSessionStreamError(ctx context.Context, out chan<- streaming.StreamChunk, err error) {

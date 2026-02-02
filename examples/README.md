@@ -14,6 +14,8 @@
 | 非流式 | 单轮 | - | YAML | `01-quickstart/main.go` |
 | 流式 | 单轮 | - | YAML | `02-streaming/main.go` |
 | 非流式 | 单轮 | - | 代码构建 | `03-programmatic-auth/main.go` |
+| 非流式 | 单轮 | - | 环境变量/YAML | `dify/basic/main.go` |
+| 流式 | 单轮 | - | 环境变量 | `dify/streaming/main.go` |
 | 非流式 | 多轮 | Memory | YAML | `04-session-memory/basic/main.go` |
 | 流式 | 多轮 | Memory | YAML | `04-session-memory/streaming/main.go` |
 | 非流式 | 多轮 | Memory | 代码构建 | `04-session-memory/programmatic/main.go` |
@@ -31,6 +33,7 @@
 | 非流式 | 多轮 | MySQL | 代码构建 | `08-session-mysql/programmatic/main.go` |
 | 测试 | - | - | YAML | `09-connectivity-test/basic/main.go` |
 | 测试 | - | - | 代码构建 | `09-connectivity-test/programmatic/main.go` |
+| 非流式 | 单轮 | - | 代码构建 | `qwen-signature/main.go` |
 
 ## 快速索引
 
@@ -44,10 +47,12 @@
 - 01-quickstart
 - 02-streaming
 - 03-programmatic-auth
+- dify
 - 04-session-memory
 - 05-session-file
 - 09-connectivity-test
 - 10-custom-provider-huggingface
+- qwen-signature
 
 ### 需要数据库驱动的示例
 

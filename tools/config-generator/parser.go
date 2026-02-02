@@ -160,15 +160,7 @@ func parseURL(urlStr string) (string, string, map[string]string) {
 		baseURL = parsed.Scheme + "://" + parsed.Host
 	}
 	pathValue := parsed.Path
-	query := map[string]string{}
-	for k, v := range parsed.Query() {
-		if len(v) > 0 {
-			query[k] = v[0]
-		}
-	}
-	if len(query) == 0 {
-		return baseURL, pathValue, nil
-	}
+	query := parseQueryValues(parsed.Query())
 	return baseURL, pathValue, query
 }
 
@@ -185,8 +177,31 @@ func finalizePlatform(p *PlatformInfo) error {
 	}
 	p.Headers = req.Headers
 	p.RequestBody = req.Body
-	if p.Path == "" {
+	if req.Path != "" {
 		p.Path = req.Path
+	}
+	if strings.Contains(p.Path, "?") {
+		if parsed, err := url.Parse(p.Path); err == nil {
+			if q := parseQueryValues(parsed.Query()); len(q) > 0 {
+				if p.QueryParams == nil {
+					p.QueryParams = map[string]string{}
+				}
+				for k, v := range q {
+					p.QueryParams[k] = v
+				}
+			}
+			if parsed.Path != "" {
+				p.Path = parsed.Path
+			}
+		}
+	}
+	if len(req.QueryParams) > 0 {
+		if p.QueryParams == nil {
+			p.QueryParams = map[string]string{}
+		}
+		for k, v := range req.QueryParams {
+			p.QueryParams[k] = v
+		}
 	}
 	if p.Path == "" {
 		p.Path = "/chat/completions"
@@ -225,10 +240,11 @@ func finalizePlatform(p *PlatformInfo) error {
 }
 
 type requestBlock struct {
-	Method  string
-	Path    string
-	Headers map[string]string
-	Body    map[string]any
+	Method      string
+	Path        string
+	Headers     map[string]string
+	Body        map[string]any
+	QueryParams map[string]string
 }
 
 func parseRequestBlock(raw string) (requestBlock, error) {
@@ -240,17 +256,21 @@ func parseRequestBlock(raw string) (requestBlock, error) {
 	parts := strings.Fields(first)
 	method := ""
 	pathValue := ""
+	queryParams := map[string]string{}
 	if len(parts) >= 2 {
 		method = parts[0]
 		pathValue = parts[1]
 	}
-	if strings.HasPrefix(pathValue, "http") {
-		if parsed, err := url.Parse(pathValue); err == nil {
-			pathValue = parsed.Path
-		}
-	}
 	if pathValue != "" {
 		pathValue = strings.TrimSpace(pathValue)
+		if parsed, err := url.Parse(pathValue); err == nil {
+			if parsed.Path != "" {
+				pathValue = parsed.Path
+			}
+			if q := parseQueryValues(parsed.Query()); len(q) > 0 {
+				queryParams = q
+			}
+		}
 	}
 
 	headers := map[string]string{}
@@ -285,7 +305,10 @@ func parseRequestBlock(raw string) (requestBlock, error) {
 			}
 		}
 	}
-	return requestBlock{Method: method, Path: pathValue, Headers: headers, Body: body}, nil
+	if len(queryParams) == 0 {
+		queryParams = nil
+	}
+	return requestBlock{Method: method, Path: pathValue, Headers: headers, Body: body, QueryParams: queryParams}, nil
 }
 
 type responseBlock struct {
@@ -350,6 +373,22 @@ func parseResponseBlock(raw string) (responseBlock, error) {
 		}
 	}
 	return out, nil
+}
+
+func parseQueryValues(values url.Values) map[string]string {
+	if len(values) == 0 {
+		return nil
+	}
+	query := map[string]string{}
+	for k, v := range values {
+		if len(v) > 0 {
+			query[k] = v[0]
+		}
+	}
+	if len(query) == 0 {
+		return nil
+	}
+	return query
 }
 
 func splitHeader(line string) (string, string, bool) {

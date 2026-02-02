@@ -161,15 +161,15 @@ sequenceDiagram
 ### 4.5 关键数据结构流转
 
 #### ChatRequest
-- 字段：`Model` / `Messages` / `Temperature` / `MaxTokens` / `Stream`。
+- 字段：`Model` / `Messages` / `Temperature` / `MaxTokens` / `Stream` / `SessionID`。
 - 流转：用户代码 → Client → Provider.BuildRequest → HTTP 请求。
 
 #### StreamChunk
-- 字段：`Text` / `Done` / `Error` / `Raw`。
+- 字段：`Text` / `SessionID` / `Usage` / `Done` / `Error` / `Raw`。
 - 流转：通用解析器 → Client → 用户代码。
 
 #### ChatResponse
-- 字段：`Text` / `Raw`。
+- 字段：`Text` / `SessionID` / `Usage` / `Raw`。
 - 流转：Provider.ParseResponse 或 `ChatStreamSync` 聚合 → 用户代码。
 
 #### Message

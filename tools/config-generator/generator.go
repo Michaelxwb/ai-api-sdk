@@ -161,12 +161,13 @@ func detectAuthType(headers map[string]string) AuthInfo {
 
 	if auth := lower["authorization"]; auth != "" {
 		if strings.HasPrefix(strings.ToLower(auth), "bearer ") {
-			return AuthInfo{Type: "bearer_token", BearerToken: "REPLACE_WITH_YOUR_TOKEN"}
+			token := strings.TrimSpace(auth[len("bearer "):])
+			return AuthInfo{Type: "bearer_token", BearerToken: token}
 		}
-		return AuthInfo{Type: "api_key", APIKey: "REPLACE_WITH_YOUR_API_KEY"}
+		return AuthInfo{Type: "api_key", APIKey: strings.TrimSpace(auth)}
 	}
 	if apiKey := firstNonEmpty(lower["x-api-key"], lower["api-key"], lower["apikey"], lower["x_api_key"]); apiKey != "" {
-		return AuthInfo{Type: "api_key", APIKey: "REPLACE_WITH_YOUR_API_KEY"}
+		return AuthInfo{Type: "api_key", APIKey: strings.TrimSpace(apiKey)}
 	}
 
 	customHeaders := map[string]string{}
@@ -177,9 +178,7 @@ func detectAuthType(headers map[string]string) AuthInfo {
 		if k == "authorization" {
 			continue
 		}
-		if looksAuthHeader(k) {
-			customHeaders[canonicalHeader(k)] = placeholderForHeader(k, v)
-		}
+		customHeaders[canonicalHeader(k)] = placeholderForHeader(k, v)
 	}
 	if len(customHeaders) > 0 {
 		return AuthInfo{Type: "none", CustomHeaders: customHeaders}
@@ -240,18 +239,6 @@ func canonicalHeader(keyLower string) string {
 }
 
 func placeholderForHeader(keyLower, value string) string {
-	_ = value
-	if keyLower == "cookie" {
-		return "REPLACE_WITH_COOKIE"
-	}
-	if strings.Contains(keyLower, "token") {
-		return "REPLACE_WITH_TOKEN"
-	}
-	if strings.Contains(keyLower, "key") {
-		return "REPLACE_WITH_API_KEY"
-	}
-	if strings.Contains(keyLower, "user") {
-		return "REPLACE_WITH_USER_ID"
-	}
-	return "REPLACE_WITH_HEADER_VALUE"
+	_ = keyLower
+	return strings.TrimSpace(value)
 }

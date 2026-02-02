@@ -67,6 +67,7 @@ providers:
 | vLLM | `openai_compat` | 无 / Bearer | OpenAI 兼容 |
 | llama.cpp | `openai_compat` | 无 / Bearer | OpenAI 兼容 |
 | HF TGI | `openai_compat` | 无 / Bearer | OpenAI 兼容 |
+| Dify | `dify` | API Key | 开源 LLM 应用开发平台 |
 | 自定义网关 | `openai_compat` | 自定义 Headers / Cookie | 通过 `path` + `extra_body` + `headers` 配置 |
 
 ### 接入自定义网关
@@ -84,6 +85,35 @@ providers:
       group: "default"
       tenant: "team-a"
 ```
+
+### Dify 配置
+
+Dify 是开源的 LLM 应用开发平台。
+
+官方文档： https://docs.dify.ai/
+
+```yaml
+providers:
+  - name: "dify"
+    type: "dify"
+    base_url: "https://api.dify.ai/v1"
+    auth_ref: "dify_cred"
+
+credentials:
+  - id: "dify_cred"
+    auth_type: "api_key"
+    api_key: "app-xxxxxxxxxxxx"
+```
+
+特性支持：
+
+- ✅ 非流式对话
+- ✅ 流式对话（SSE）
+- ✅ 多轮对话（conversation_id）
+- ✅ 变量注入（inputs）
+- ✅ Token 统计
+
+使用示例见 `examples/dify/` 目录。
 
 ## 认证配置
 

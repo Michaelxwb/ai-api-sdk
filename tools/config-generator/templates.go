@@ -17,6 +17,8 @@ type TemplateData struct {
 	Path              string
 	AuthType          string
 	AuthTypeDesc      string
+	BearerToken       string
+	APIKey            string
 	ExtraBody         map[string]any
 	ExtraBodyKeys     []string
 	ExtraBodyYAML     map[string]string
@@ -66,6 +68,8 @@ func BuildTemplateData(p PlatformInfo, authInfo AuthInfo) TemplateData {
 		Path:              p.Path,
 		AuthType:          authInfo.Type,
 		AuthTypeDesc:      authTypeDesc(authInfo),
+		BearerToken:       authInfo.BearerToken,
+		APIKey:            authInfo.APIKey,
 		ExtraBody:         extraBody,
 		ExtraBodyKeys:     extraKeys,
 		ExtraBodyYAML:     extraYAML,
@@ -272,9 +276,9 @@ credentials:
     provider: "openai_compat"
     auth_type: "{{ .AuthType }}"
 {{- if eq .AuthType "bearer_token" }}
-    access_token: "REPLACE_WITH_YOUR_TOKEN"  # 替换为真实 Token
+    access_token: "{{ .BearerToken }}"
 {{- else if eq .AuthType "api_key" }}
-    api_key: "REPLACE_WITH_YOUR_API_KEY"     # 替换为真实 API Key
+    api_key: "{{ .APIKey }}"
 {{- end }}
 {{- if .CustomHeaderKeys }}
     headers:
@@ -330,9 +334,9 @@ func New{{ .FuncName }}Config() *config.Config {
                 Provider: "openai_compat",           // Provider 类型
                 AuthType: {{ authConst .AuthType }},
 {{- if eq .AuthType "bearer_token" }}
-                AccessToken: "REPLACE_WITH_YOUR_TOKEN", // 替换为真实 Token
+                AccessToken: "{{ .BearerToken }}",
 {{- else if eq .AuthType "api_key" }}
-                APIKey: "REPLACE_WITH_YOUR_API_KEY", // 替换为真实 API Key
+                APIKey: "{{ .APIKey }}",
 {{- end }}
 {{- if .CustomHeaderKeys }}
                 Headers: map[string]string{
