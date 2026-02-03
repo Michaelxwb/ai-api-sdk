@@ -67,8 +67,6 @@ func NewPostgresStore(connStr string) (*PostgresStore, error) {
 		session_id TEXT NOT NULL,
 		role TEXT NOT NULL,
 		content TEXT NOT NULL,
-		name TEXT,
-		tool_calls TEXT,
 		created_at TIMESTAMP NOT NULL,
 		FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 	);
@@ -142,21 +140,41 @@ func (s *PostgresStore) Save(ctx context.Context, state *session.SessionState) e
 	}
 	state.UpdatedAt = now
 
-	meta := metaFromState(state)
-	var attrsJSON []byte
-	if meta != nil && meta.Attrs != nil {
-		var err error
-		attrsJSON, err = json.Marshal(meta.Attrs)
-		if err != nil {
-			return err
-		}
-	}
-
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+
+	// 查 existing meta 用于合并
+	var existingMeta *session.SessionMeta
+	var ep, em string
+	var ec, eu time.Time
+	var ea []byte
+	err = tx.QueryRowContext(ctx, `SELECT provider, model, created_at, updated_at, attrs FROM sessions WHERE id = $1`, state.ID).Scan(&ep, &em, &ec, &eu, &ea)
+	if err == nil {
+		existingMeta = &session.SessionMeta{
+			ID:        state.ID,
+			Provider:  ep,
+			Model:     em,
+			CreatedAt: ec,
+			UpdatedAt: eu,
+		}
+		if len(ea) > 0 {
+			_ = json.Unmarshal(ea, &existingMeta.Attrs)
+		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+
+	meta := normalizeMetaForSave(state, existingMeta, now)
+	var attrsJSON []byte
+	if meta.Attrs != nil {
+		attrsJSON, err = json.Marshal(meta.Attrs)
+		if err != nil {
+			return err
+		}
+	}
 
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO sessions (id, provider, model, created_at, updated_at, attrs)
@@ -166,7 +184,7 @@ func (s *PostgresStore) Save(ctx context.Context, state *session.SessionState) e
 			model = EXCLUDED.model,
 			updated_at = EXCLUDED.updated_at,
 			attrs = EXCLUDED.attrs
-	`, state.ID, meta.Provider, meta.Model, state.CreatedAt, state.UpdatedAt, attrsJSON)
+	`, state.ID, meta.Provider, meta.Model, meta.CreatedAt, meta.UpdatedAt, attrsJSON)
 	if err != nil {
 		return err
 	}
@@ -240,7 +258,7 @@ type postgresMessageQueryer interface {
 
 func (s *PostgresStore) fetchMessages(ctx context.Context, queryer postgresMessageQueryer, sessionID string) ([]session.Message, error) {
 	rows, err := queryer.QueryContext(ctx, `
-		SELECT role, content, name
+		SELECT role, content
 		FROM session_messages
 		WHERE session_id = $1
 		ORDER BY id ASC
@@ -253,13 +271,9 @@ func (s *PostgresStore) fetchMessages(ctx context.Context, queryer postgresMessa
 	var messages []session.Message
 	for rows.Next() {
 		var msg session.Message
-		var name sql.NullString
 
-		if err := rows.Scan(&msg.Role, &msg.Content, &name); err != nil {
+		if err := rows.Scan(&msg.Role, &msg.Content); err != nil {
 			return nil, err
-		}
-		if name.Valid {
-			msg.Name = name.String
 		}
 		messages = append(messages, msg)
 	}
@@ -276,8 +290,8 @@ func (s *PostgresStore) insertMessagesTx(ctx context.Context, tx *sql.Tx, sessio
 	}
 
 	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO session_messages (session_id, role, content, name, created_at)
-		VALUES ($1, $2, $3, $4, $5)
+		INSERT INTO session_messages (session_id, role, content, created_at)
+		VALUES ($1, $2, $3, $4)
 	`)
 	if err != nil {
 		return err
@@ -286,11 +300,7 @@ func (s *PostgresStore) insertMessagesTx(ctx context.Context, tx *sql.Tx, sessio
 
 	now := time.Now()
 	for _, msg := range msgs {
-		var name interface{} = sql.NullString{}
-		if msg.Name != "" {
-			name = msg.Name
-		}
-		if _, err := stmt.ExecContext(ctx, sessionID, msg.Role, msg.Content, name, now); err != nil {
+		if _, err := stmt.ExecContext(ctx, sessionID, msg.Role, msg.Content, now); err != nil {
 			return err
 		}
 	}

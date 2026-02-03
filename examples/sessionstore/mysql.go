@@ -70,8 +70,6 @@ func NewMySQLStore(dsn string) (*MySQLStore, error) {
 		session_id VARCHAR(255) NOT NULL,
 		role VARCHAR(50) NOT NULL,
 		content TEXT NOT NULL,
-		name VARCHAR(255),
-		tool_calls TEXT,
 		created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
 		FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
 		INDEX idx_session_messages_session_id (session_id, id)
@@ -143,21 +141,41 @@ func (s *MySQLStore) Save(ctx context.Context, state *session.SessionState) erro
 	}
 	state.UpdatedAt = now
 
-	meta := metaFromState(state)
-	var attrsJSON []byte
-	if meta != nil && meta.Attrs != nil {
-		var err error
-		attrsJSON, err = json.Marshal(meta.Attrs)
-		if err != nil {
-			return err
-		}
-	}
-
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+
+	// 查 existing meta 用于合并
+	var existingMeta *session.SessionMeta
+	var ep, em string
+	var ec, eu time.Time
+	var ea []byte
+	err = tx.QueryRowContext(ctx, `SELECT provider, model, created_at, updated_at, attrs FROM sessions WHERE id = ?`, state.ID).Scan(&ep, &em, &ec, &eu, &ea)
+	if err == nil {
+		existingMeta = &session.SessionMeta{
+			ID:        state.ID,
+			Provider:  ep,
+			Model:     em,
+			CreatedAt: ec,
+			UpdatedAt: eu,
+		}
+		if len(ea) > 0 {
+			_ = json.Unmarshal(ea, &existingMeta.Attrs)
+		}
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+
+	meta := normalizeMetaForSave(state, existingMeta, now)
+	var attrsJSON []byte
+	if meta.Attrs != nil {
+		attrsJSON, err = json.Marshal(meta.Attrs)
+		if err != nil {
+			return err
+		}
+	}
 
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO sessions (id, provider, model, created_at, updated_at, attrs)
@@ -167,7 +185,7 @@ func (s *MySQLStore) Save(ctx context.Context, state *session.SessionState) erro
 			model = VALUES(model),
 			updated_at = VALUES(updated_at),
 			attrs = VALUES(attrs)
-	`, state.ID, meta.Provider, meta.Model, state.CreatedAt, state.UpdatedAt, attrsJSON)
+	`, state.ID, meta.Provider, meta.Model, meta.CreatedAt, meta.UpdatedAt, attrsJSON)
 	if err != nil {
 		return err
 	}
@@ -241,7 +259,7 @@ type mysqlMessageQueryer interface {
 
 func (s *MySQLStore) fetchMessages(ctx context.Context, queryer mysqlMessageQueryer, sessionID string) ([]session.Message, error) {
 	rows, err := queryer.QueryContext(ctx, `
-		SELECT role, content, name
+		SELECT role, content
 		FROM session_messages
 		WHERE session_id = ?
 		ORDER BY id ASC
@@ -254,13 +272,9 @@ func (s *MySQLStore) fetchMessages(ctx context.Context, queryer mysqlMessageQuer
 	var messages []session.Message
 	for rows.Next() {
 		var msg session.Message
-		var name sql.NullString
 
-		if err := rows.Scan(&msg.Role, &msg.Content, &name); err != nil {
+		if err := rows.Scan(&msg.Role, &msg.Content); err != nil {
 			return nil, err
-		}
-		if name.Valid {
-			msg.Name = name.String
 		}
 		messages = append(messages, msg)
 	}
@@ -277,8 +291,8 @@ func (s *MySQLStore) insertMessagesTx(ctx context.Context, tx *sql.Tx, sessionID
 	}
 
 	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO session_messages (session_id, role, content, name, created_at)
-		VALUES (?, ?, ?, ?, ?)
+		INSERT INTO session_messages (session_id, role, content, created_at)
+		VALUES (?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -287,11 +301,7 @@ func (s *MySQLStore) insertMessagesTx(ctx context.Context, tx *sql.Tx, sessionID
 
 	now := time.Now()
 	for _, msg := range msgs {
-		var name interface{} = sql.NullString{}
-		if msg.Name != "" {
-			name = msg.Name
-		}
-		if _, err := stmt.ExecContext(ctx, sessionID, msg.Role, msg.Content, name, now); err != nil {
+		if _, err := stmt.ExecContext(ctx, sessionID, msg.Role, msg.Content, now); err != nil {
 			return err
 		}
 	}

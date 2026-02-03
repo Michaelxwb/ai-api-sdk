@@ -79,19 +79,21 @@ func (s *RedisStore) Save(ctx context.Context, state *session.SessionState) erro
 
 	now := time.Now()
 	if state.CreatedAt.IsZero() {
-		existing, err := s.lookupCreatedAt(ctx, state.ID)
-		if err != nil {
-			return err
-		}
-		if existing.IsZero() {
-			state.CreatedAt = now
-		} else {
-			state.CreatedAt = existing
-		}
+		state.CreatedAt = now
 	}
 	state.UpdatedAt = now
 
-	meta := metaFromState(state)
+	// 拉 existing meta 用于合并
+	var existingMeta *session.SessionMeta
+	existingRaw, err := s.rdb.Get(ctx, s.metaKey(state.ID)).Bytes()
+	if err == nil && len(existingRaw) > 0 {
+		var em session.SessionMeta
+		if json.Unmarshal(existingRaw, &em) == nil {
+			existingMeta = &em
+		}
+	}
+
+	meta := normalizeMetaForSave(state, existingMeta, now)
 	payload, err := json.Marshal(meta)
 	if err != nil {
 		return err

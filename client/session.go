@@ -26,6 +26,7 @@ type Session struct {
 	store session.SessionStore
 	id    string
 	mode  HistoryMode
+	meta  map[string]string
 
 	// 内部状态
 	mu          sync.Mutex
@@ -70,6 +71,13 @@ func WithID(id string) SessionOption {
 func WithHistoryMode(mode HistoryMode) SessionOption {
 	return func(s *Session) {
 		s.mode = mode
+	}
+}
+
+// WithMeta 设置会话的自定义元数据字段，每次保存时自动写入
+func WithMeta(kv map[string]string) SessionOption {
+	return func(s *Session) {
+		s.meta = kv
 	}
 }
 
@@ -149,6 +157,16 @@ func (s *Session) Chat(ctx context.Context, req base.ChatRequest) (base.ChatResp
 			Provider:  s.provider,
 			Messages:  newMsgs,
 			UpdatedAt: time.Now(),
+		}
+		if len(s.meta) > 0 || req.Model != "" {
+			m := make(map[string]string, len(s.meta)+1)
+			for k, v := range s.meta {
+				m[k] = v
+			}
+			if req.Model != "" {
+				m["model"] = req.Model
+			}
+			state.Meta = m
 		}
 
 		_ = s.store.Save(ctx, state) // 失败不影响响应
@@ -256,6 +274,16 @@ func (s *Session) ChatStream(ctx context.Context, req base.ChatRequest) (<-chan 
 				Provider:  s.provider,
 				Messages:  newMsgs,
 				UpdatedAt: time.Now(),
+			}
+			if len(s.meta) > 0 || req.Model != "" {
+				m := make(map[string]string, len(s.meta)+1)
+				for k, v := range s.meta {
+					m[k] = v
+				}
+				if req.Model != "" {
+					m["model"] = req.Model
+				}
+				state.Meta = m
 			}
 
 			_ = s.store.Save(ctx, state) // 失败不影响响应

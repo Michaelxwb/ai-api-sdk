@@ -188,8 +188,6 @@ CREATE TABLE IF NOT EXISTS session_messages (
     session_id TEXT NOT NULL,
     role TEXT NOT NULL,
     content TEXT NOT NULL,
-    name TEXT,
-    tool_calls TEXT,
     created_at TIMESTAMP NOT NULL,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );
@@ -215,8 +213,6 @@ CREATE TABLE IF NOT EXISTS session_messages (
     session_id VARCHAR(255) NOT NULL,
     role VARCHAR(50) NOT NULL,
     content TEXT NOT NULL,
-    name VARCHAR(255),
-    tool_calls TEXT,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE,
     INDEX idx_session_messages_session_id (session_id, id)
@@ -235,12 +231,10 @@ CREATE TABLE IF NOT EXISTS sessions (
 );
 
 CREATE TABLE IF NOT EXISTS session_messages (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INTEGER PRIMARY KEY,
     session_id TEXT NOT NULL,
     role TEXT NOT NULL,
     content TEXT NOT NULL,
-    name TEXT,
-    tool_calls TEXT,
     created_at INTEGER NOT NULL,
     FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 );

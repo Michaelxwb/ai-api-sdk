@@ -20,7 +20,7 @@ import (
 const (
 	providerName = "vllm_local"
 	modelName    = "minimaxai/minimax-m2.1"
-	promptText   = "什么是Go语言？"
+	promptText   = "什么是Rust语言？"
 	streamOutput = true
 )
 
@@ -36,16 +36,16 @@ func main() {
 	// ========================================
 	// 场景1：无SessionStore（最简单）
 	// ========================================
-	fmt.Println("场景1：=========================无SessionStore=========================")
-	example1_NoStore(cli, ctx)
-	time.Sleep(10 * time.Second)
+	//fmt.Println("场景1：=========================无SessionStore=========================")
+	//example1_NoStore(cli, ctx)
+	//time.Sleep(10 * time.Second)
 
 	// ========================================
 	// 场景2：Memory SessionStore（内存审计）
 	// ========================================
-	fmt.Println("\n场景2：=========================Memory SessionStore=========================")
-	example2_MemoryStore(cli, ctx)
-	time.Sleep(10 * time.Second)
+	//fmt.Println("\n场景2：=========================Memory SessionStore=========================")
+	//example2_MemoryStore(cli, ctx)
+	//time.Sleep(10 * time.Second)
 
 	// ========================================
 	// 场景3：File SessionStore
@@ -147,6 +147,10 @@ func example3_FileStore(cli *client.Client, ctx context.Context) {
 	sess := cli.NewSession(
 		providerName,
 		client.WithStore(store),
+		client.WithMeta(map[string]string{
+			"user_id":   "u-123",
+			"chat_room": "room-456",
+		}),
 		client.WithHistoryMode(client.HistoryNone),
 		client.WithAutoID(),
 	)
@@ -187,6 +191,10 @@ func example4_SQLiteStore(cli *client.Client, ctx context.Context) {
 		client.WithStore(store),
 		client.WithHistoryMode(client.HistoryNone),
 		client.WithAutoID(),
+		client.WithMeta(map[string]string{
+			"user_id":   "x-123",
+			"chat_room": "xxxx-456",
+		}),
 	)
 
 	if streamOutput {

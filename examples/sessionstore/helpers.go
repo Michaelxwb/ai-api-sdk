@@ -139,12 +139,20 @@ func normalizeMetaForSave(state *session.SessionState, existing *session.Session
 	if meta.UpdatedAt.IsZero() {
 		meta.UpdatedAt = now
 	}
-	if state.Meta == nil && existing != nil {
+	if existing != nil {
 		if meta.Model == "" {
 			meta.Model = existing.Model
 		}
-		if meta.Attrs == nil && existing.Attrs != nil {
-			meta.Attrs = cloneAttrs(existing.Attrs)
+		if existing.Attrs != nil {
+			if meta.Attrs == nil {
+				meta.Attrs = cloneAttrs(existing.Attrs)
+			} else {
+				for k, v := range existing.Attrs {
+					if _, exists := meta.Attrs[k]; !exists {
+						meta.Attrs[k] = v
+					}
+				}
+			}
 		}
 	}
 	return meta

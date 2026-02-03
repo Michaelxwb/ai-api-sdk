@@ -53,12 +53,10 @@ func NewSQLiteStore(dbPath string) (*SQLiteStore, error) {
 	);
 
 	CREATE TABLE IF NOT EXISTS session_messages (
-		id INTEGER PRIMARY KEY AUTOINCREMENT,
+		id INTEGER PRIMARY KEY,
 		session_id TEXT NOT NULL,
 		role TEXT NOT NULL,
 		content TEXT NOT NULL,
-		name TEXT,
-		tool_calls TEXT,
 		created_at INTEGER NOT NULL,
 		FOREIGN KEY (session_id) REFERENCES sessions(id) ON DELETE CASCADE
 	);
@@ -88,7 +86,7 @@ func (s *SQLiteStore) Get(ctx context.Context, sessionID string) (*session.Sessi
 	}
 
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT role, content, name
+		SELECT role, content
 		FROM session_messages
 		WHERE session_id = ?
 		ORDER BY id ASC
@@ -101,14 +99,9 @@ func (s *SQLiteStore) Get(ctx context.Context, sessionID string) (*session.Sessi
 	var messages []session.Message
 	for rows.Next() {
 		var msg session.Message
-		var name sql.NullString
 
-		if err := rows.Scan(&msg.Role, &msg.Content, &name); err != nil {
+		if err := rows.Scan(&msg.Role, &msg.Content); err != nil {
 			return nil, err
-		}
-
-		if name.Valid {
-			msg.Name = name.String
 		}
 
 		messages = append(messages, msg)
@@ -197,8 +190,8 @@ func (s *SQLiteStore) Save(ctx context.Context, state *session.SessionState) err
 
 	if len(state.Messages) > 0 {
 		stmt, err := tx.PrepareContext(ctx, `
-			INSERT INTO session_messages(session_id, role, content, name, created_at)
-			VALUES(?, ?, ?, ?, ?)
+			INSERT INTO session_messages(session_id, role, content, created_at)
+			VALUES(?, ?, ?, ?)
 		`)
 		if err != nil {
 			return err
@@ -211,11 +204,7 @@ func (s *SQLiteStore) Save(ctx context.Context, state *session.SessionState) err
 		}
 		createdAtUnix := createdAt.Unix()
 		for _, msg := range state.Messages {
-			var name sql.NullString
-			if msg.Name != "" {
-				name = sql.NullString{String: msg.Name, Valid: true}
-			}
-			if _, err := stmt.ExecContext(ctx, state.ID, msg.Role, msg.Content, name, createdAtUnix); err != nil {
+			if _, err := stmt.ExecContext(ctx, state.ID, msg.Role, msg.Content, createdAtUnix); err != nil {
 				return err
 			}
 		}
@@ -252,8 +241,8 @@ func (s *SQLiteStore) Append(ctx context.Context, sessionID string, msgs ...sess
 	}
 
 	stmt, err := tx.PrepareContext(ctx, `
-		INSERT INTO session_messages(session_id, role, content, name, created_at)
-		VALUES(?, ?, ?, ?, ?)
+		INSERT INTO session_messages(session_id, role, content, created_at)
+		VALUES(?, ?, ?, ?)
 	`)
 	if err != nil {
 		return err
@@ -261,12 +250,7 @@ func (s *SQLiteStore) Append(ctx context.Context, sessionID string, msgs ...sess
 	defer stmt.Close()
 
 	for _, msg := range msgs {
-		var name sql.NullString
-		if msg.Name != "" {
-			name = sql.NullString{String: msg.Name, Valid: true}
-		}
-
-		if _, err := stmt.ExecContext(ctx, sessionID, msg.Role, msg.Content, name, now); err != nil {
+		if _, err := stmt.ExecContext(ctx, sessionID, msg.Role, msg.Content, now); err != nil {
 			return err
 		}
 	}
