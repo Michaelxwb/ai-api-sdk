@@ -6,6 +6,7 @@ import (
 	"log"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/Michaelxwb/ai-api-sdk/auth"
 	"github.com/Michaelxwb/ai-api-sdk/client"
@@ -17,10 +18,11 @@ import (
 )
 
 const (
-	providerName = "openai"
-	modelName    = "gpt-3.5-turbo"
-	firstPrompt  = "请记住：我最喜欢的编程语言是 Go。"
+	providerName = "vllm_local"
+	modelName    = "minimaxai/minimax-m2.1"
+	firstPrompt  = "请记住：我最喜欢的编程语言是 Python。"
 	secondPrompt = "我最喜欢的编程语言是什么？"
+	streamOutput = true
 )
 
 func main() {
@@ -35,38 +37,44 @@ func main() {
 	// ========================================
 	// 场景1：无SessionStore（手动传递历史）
 	// ========================================
-	fmt.Println("场景1：无SessionStore")
+	fmt.Println("场景1：=========================无SessionStore=========================")
 	example1_NoStore(cli, ctx)
+	time.Sleep(10 * time.Second)
 
 	// ========================================
 	// 场景2：Memory SessionStore（自动加载历史）
 	// ========================================
-	fmt.Println("\n场景2：Memory SessionStore")
+	fmt.Println("\n场景2：=========================Memory SessionStore=========================")
 	example2_MemoryStore(cli, ctx)
+	time.Sleep(10 * time.Second)
 
 	// ========================================
 	// 场景3：File SessionStore
 	// ========================================
-	fmt.Println("\n场景3：File SessionStore")
+	fmt.Println("\n场景3：=========================File SessionStore=========================")
 	example3_FileStore(cli, ctx)
+	time.Sleep(10 * time.Second)
 
 	// ========================================
 	// 场景4：SQLite SessionStore
 	// ========================================
-	fmt.Println("\n场景4：SQLite SessionStore")
+	fmt.Println("\n场景4：=========================SQLite SessionStore=========================")
 	example4_SQLiteStore(cli, ctx)
+	time.Sleep(10 * time.Second)
 
 	// ========================================
 	// 场景5：MySQL SessionStore（需要配置）
 	// ========================================
 	// fmt.Println("\n场景5：MySQL SessionStore")
 	// example5_MySQLStore(cli, ctx)
+	time.Sleep(10 * time.Second)
 
 	// ========================================
 	// 场景6：PostgreSQL SessionStore（需要配置）
 	// ========================================
 	// fmt.Println("\n场景6：PostgreSQL SessionStore")
 	// example6_PostgreSQLStore(cli, ctx)
+	time.Sleep(10 * time.Second)
 
 	// ========================================
 	// 场景7：Redis SessionStore（需要配置）
@@ -81,7 +89,10 @@ func example1_NoStore(cli *client.Client, ctx context.Context) {
 		client.WithHistoryMode(client.HistoryAuto),
 	)
 
-	resp1, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("第一次回答: ")
+	}
+	text1, err := chat(ctx, sess, base.ChatRequest{
 		Model: modelName,
 		Messages: []base.Message{{
 			Role:    "user",
@@ -92,15 +103,20 @@ func example1_NoStore(cli *client.Client, ctx context.Context) {
 		log.Printf("Error: %v", err)
 		return
 	}
-	fmt.Printf("第一次回答: %s\n", resp1.Text)
+	if !streamOutput {
+		fmt.Printf("第一次回答: %s\n", text1)
+	}
 
 	// 无 SessionStore 时，需要手动携带历史上下文
 	history := []base.Message{
 		{Role: "user", Content: firstPrompt},
-		{Role: "assistant", Content: resp1.Text},
+		{Role: "assistant", Content: text1},
 	}
 
-	resp2, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("第二次回答: ")
+	}
+	text2, err := chat(ctx, sess, base.ChatRequest{
 		Model:    modelName,
 		Messages: append(history, base.Message{Role: "user", Content: secondPrompt}),
 	})
@@ -108,7 +124,9 @@ func example1_NoStore(cli *client.Client, ctx context.Context) {
 		log.Printf("Error: %v", err)
 		return
 	}
-	fmt.Printf("第二次回答: %s\n", resp2.Text)
+	if !streamOutput {
+		fmt.Printf("第二次回答: %s\n", text2)
+	}
 }
 
 func example2_MemoryStore(cli *client.Client, ctx context.Context) {
@@ -121,7 +139,10 @@ func example2_MemoryStore(cli *client.Client, ctx context.Context) {
 		client.WithAutoID(),
 	)
 
-	resp1, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("第一次回答: ")
+	}
+	text1, err := chat(ctx, sess, base.ChatRequest{
 		Model: modelName,
 		Messages: []base.Message{{
 			Role:    "user",
@@ -132,9 +153,14 @@ func example2_MemoryStore(cli *client.Client, ctx context.Context) {
 		log.Printf("Error: %v", err)
 		return
 	}
-	fmt.Printf("第一次回答: %s\n", resp1.Text)
+	if !streamOutput {
+		fmt.Printf("第一次回答: %s\n", text1)
+	}
 
-	resp2, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("第二次回答: ")
+	}
+	text2, err := chat(ctx, sess, base.ChatRequest{
 		Model: modelName,
 		Messages: []base.Message{{
 			Role:    "user",
@@ -145,13 +171,15 @@ func example2_MemoryStore(cli *client.Client, ctx context.Context) {
 		log.Printf("Error: %v", err)
 		return
 	}
-	fmt.Printf("第二次回答: %s\n", resp2.Text)
+	if !streamOutput {
+		fmt.Printf("第二次回答: %s\n", text2)
+	}
 	fmt.Printf("会话ID: %s (已保存到Memory)\n", sess.ID())
 }
 
 func example3_FileStore(cli *client.Client, ctx context.Context) {
 	store := sessionstore.NewFile(sessionstore.FileConfig{
-		BaseDir: "/tmp/sessions",
+		BaseDir: "examples",
 	})
 
 	sess := cli.NewSession(
@@ -161,7 +189,10 @@ func example3_FileStore(cli *client.Client, ctx context.Context) {
 		client.WithAutoID(),
 	)
 
-	resp1, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("第一次回答: ")
+	}
+	text1, err := chat(ctx, sess, base.ChatRequest{
 		Model: modelName,
 		Messages: []base.Message{{
 			Role:    "user",
@@ -172,9 +203,14 @@ func example3_FileStore(cli *client.Client, ctx context.Context) {
 		log.Printf("Error: %v", err)
 		return
 	}
-	fmt.Printf("第一次回答: %s\n", resp1.Text)
+	if !streamOutput {
+		fmt.Printf("第一次回答: %s\n", text1)
+	}
 
-	resp2, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("第二次回答: ")
+	}
+	text2, err := chat(ctx, sess, base.ChatRequest{
 		Model: modelName,
 		Messages: []base.Message{{
 			Role:    "user",
@@ -185,13 +221,15 @@ func example3_FileStore(cli *client.Client, ctx context.Context) {
 		log.Printf("Error: %v", err)
 		return
 	}
-	fmt.Printf("第二次回答: %s\n", resp2.Text)
-	fmt.Printf("会话ID: %s (已保存到 /tmp/sessions/)\n", sess.ID())
+	if !streamOutput {
+		fmt.Printf("第二次回答: %s\n", text2)
+	}
+	fmt.Printf("会话ID: %s (已保存到 examples/)\n", sess.ID())
 }
 
 func example4_SQLiteStore(cli *client.Client, ctx context.Context) {
 	store, err := sessionstore.NewSQLite(sessionstore.SQLiteConfig{
-		DSN: "file:/tmp/sessions.db",
+		DSN: "examples/sessions.db",
 	})
 	if err != nil {
 		log.Printf("Error creating SQLite store: %v", err)
@@ -206,7 +244,10 @@ func example4_SQLiteStore(cli *client.Client, ctx context.Context) {
 		client.WithAutoID(),
 	)
 
-	resp1, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("第一次回答: ")
+	}
+	text1, err := chat(ctx, sess, base.ChatRequest{
 		Model: modelName,
 		Messages: []base.Message{{
 			Role:    "user",
@@ -217,9 +258,14 @@ func example4_SQLiteStore(cli *client.Client, ctx context.Context) {
 		log.Printf("Error: %v", err)
 		return
 	}
-	fmt.Printf("第一次回答: %s\n", resp1.Text)
+	if !streamOutput {
+		fmt.Printf("第一次回答: %s\n", text1)
+	}
 
-	resp2, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("第二次回答: ")
+	}
+	text2, err := chat(ctx, sess, base.ChatRequest{
 		Model: modelName,
 		Messages: []base.Message{{
 			Role:    "user",
@@ -230,7 +276,9 @@ func example4_SQLiteStore(cli *client.Client, ctx context.Context) {
 		log.Printf("Error: %v", err)
 		return
 	}
-	fmt.Printf("第二次回答: %s\n", resp2.Text)
+	if !streamOutput {
+		fmt.Printf("第二次回答: %s\n", text2)
+	}
 	fmt.Printf("会话ID: %s (已保存到SQLite)\n", sess.ID())
 }
 
@@ -265,6 +313,34 @@ func example7_RedisStore(_ *client.Client, _ context.Context) {
 	// 	return
 	// }
 	// defer store.Close()
+}
+
+// chat 根据 streamOutput 常量选择流式或非流式调用，返回响应文本
+func chat(ctx context.Context, sess *client.Session, req base.ChatRequest) (string, error) {
+	if !streamOutput {
+		resp, err := sess.Chat(ctx, req)
+		if err != nil {
+			return "", err
+		}
+		return resp.Text, nil
+	}
+
+	stream, err := sess.ChatStream(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	var fullText string
+	for chunk := range stream {
+		if chunk.Error != nil {
+			return fullText, chunk.Error
+		}
+		if chunk.Text != "" {
+			fmt.Print(chunk.Text)
+			fullText += chunk.Text
+		}
+	}
+	fmt.Println()
+	return fullText, nil
 }
 
 func loadLocalConfig(cli *client.Client) error {

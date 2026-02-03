@@ -7,12 +7,11 @@ import (
 	"errors"
 	"time"
 
-	"github.com/Michaelxwb/ai-api-sdk/provider/base"
 	"github.com/Michaelxwb/ai-api-sdk/session"
 	_ "github.com/mattn/go-sqlite3"
 )
 
-// SQLiteStore implements session.LegacySessionStore using SQLite database.
+// SQLiteStore implements session.SessionStore using SQLite database.
 // It's ideal for single-machine deployments and local persistence.
 //
 // Features:
@@ -81,44 +80,27 @@ func (s *SQLiteStore) Close() error {
 	return s.db.Close()
 }
 
-// GetMessages retrieves message history for a session.
-// Implements session.LegacySessionStore interface.
-func (s *SQLiteStore) GetMessages(ctx context.Context, sessionID string, opts session.GetOptions) ([]base.Message, error) {
-	query := `
+// Get retrieves a session snapshot.
+func (s *SQLiteStore) Get(ctx context.Context, sessionID string) (*session.SessionState, error) {
+	meta, err := s.GetMeta(ctx, sessionID)
+	if err != nil {
+		return nil, err
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
 		SELECT role, content, name
 		FROM session_messages
 		WHERE session_id = ?
 		ORDER BY id ASC
-	`
-
-	if opts.MaxMessages > 0 {
-		// Get last N messages
-		query = `
-			SELECT role, content, name
-			FROM session_messages
-			WHERE session_id = ?
-			ORDER BY id DESC
-			LIMIT ?
-		`
-	}
-
-	var rows *sql.Rows
-	var err error
-
-	if opts.MaxMessages > 0 {
-		rows, err = s.db.QueryContext(ctx, query, sessionID, opts.MaxMessages)
-	} else {
-		rows, err = s.db.QueryContext(ctx, query, sessionID)
-	}
-
+	`, sessionID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 
-	var messages []base.Message
+	var messages []session.Message
 	for rows.Next() {
-		var msg base.Message
+		var msg session.Message
 		var name sql.NullString
 
 		if err := rows.Scan(&msg.Role, &msg.Content, &name); err != nil {
@@ -136,23 +118,119 @@ func (s *SQLiteStore) GetMessages(ctx context.Context, sessionID string, opts se
 		return nil, err
 	}
 
-	if len(messages) == 0 {
-		return nil, session.ErrSessionNotFound
+	state := &session.SessionState{
+		ID:       sessionID,
+		Messages: messages,
+	}
+	applyStoredMeta(state, meta)
+	return state, nil
+}
+
+// Save writes a session snapshot.
+func (s *SQLiteStore) Save(ctx context.Context, state *session.SessionState) error {
+	if state == nil {
+		return errors.New("session store: nil state")
+	}
+	if state.ID == "" {
+		return errors.New("session store: missing session id")
 	}
 
-	// If we used DESC order (for MaxMessages), reverse the slice
-	if opts.MaxMessages > 0 && len(messages) > 0 {
-		for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
-			messages[i], messages[j] = messages[j], messages[i]
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	var existingMeta *session.SessionMeta
+	var provider, model string
+	var createdAt, updatedAt int64
+	var attrsJSON sql.NullString
+	err = tx.QueryRowContext(ctx, `
+		SELECT provider, model, created_at, updated_at, attrs
+		FROM sessions WHERE id = ?
+	`, state.ID).Scan(&provider, &model, &createdAt, &updatedAt, &attrsJSON)
+	if err == nil {
+		meta := session.SessionMeta{
+			ID:        state.ID,
+			Provider:  provider,
+			Model:     model,
+			CreatedAt: time.Unix(createdAt, 0),
+			UpdatedAt: time.Unix(updatedAt, 0),
+		}
+		if attrsJSON.Valid && attrsJSON.String != "" {
+			_ = json.Unmarshal([]byte(attrsJSON.String), &meta.Attrs)
+		}
+		existingMeta = &meta
+	} else if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+
+	now := time.Now()
+	meta := normalizeMetaForSave(state, existingMeta, now)
+
+	attrsPayload := ""
+	if meta.Attrs != nil {
+		payload, err := json.Marshal(meta.Attrs)
+		if err != nil {
+			return err
+		}
+		attrsPayload = string(payload)
+	}
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO sessions(id, provider, model, created_at, updated_at, attrs)
+		VALUES(?, ?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET
+			provider = excluded.provider,
+			model = excluded.model,
+			created_at = excluded.created_at,
+			updated_at = excluded.updated_at,
+			attrs = excluded.attrs
+	`, state.ID, meta.Provider, meta.Model, meta.CreatedAt.Unix(), meta.UpdatedAt.Unix(), attrsPayload)
+	if err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx, "DELETE FROM session_messages WHERE session_id = ?", state.ID); err != nil {
+		return err
+	}
+
+	if len(state.Messages) > 0 {
+		stmt, err := tx.PrepareContext(ctx, `
+			INSERT INTO session_messages(session_id, role, content, name, created_at)
+			VALUES(?, ?, ?, ?, ?)
+		`)
+		if err != nil {
+			return err
+		}
+		defer stmt.Close()
+
+		createdAt := meta.UpdatedAt
+		if createdAt.IsZero() {
+			createdAt = now
+		}
+		createdAtUnix := createdAt.Unix()
+		for _, msg := range state.Messages {
+			var name sql.NullString
+			if msg.Name != "" {
+				name = sql.NullString{String: msg.Name, Valid: true}
+			}
+			if _, err := stmt.ExecContext(ctx, state.ID, msg.Role, msg.Content, name, createdAtUnix); err != nil {
+				return err
+			}
 		}
 	}
 
-	return messages, nil
+	return tx.Commit()
 }
 
-// AppendMessages appends new messages to a session.
-// Implements session.LegacySessionStore interface.
-func (s *SQLiteStore) AppendMessages(ctx context.Context, sessionID string, msgs []base.Message) error {
+// Delete removes a session.
+func (s *SQLiteStore) Delete(ctx context.Context, sessionID string) error {
+	return s.DeleteSession(ctx, sessionID)
+}
+
+// Append appends messages to a session.
+func (s *SQLiteStore) Append(ctx context.Context, sessionID string, msgs ...session.Message) error {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -163,7 +241,6 @@ func (s *SQLiteStore) AppendMessages(ctx context.Context, sessionID string, msgs
 	}
 	defer tx.Rollback()
 
-	// Ensure session exists (upsert)
 	now := time.Now().Unix()
 	_, err = tx.ExecContext(ctx, `
 		INSERT INTO sessions(id, provider, model, created_at, updated_at)
@@ -174,7 +251,6 @@ func (s *SQLiteStore) AppendMessages(ctx context.Context, sessionID string, msgs
 		return err
 	}
 
-	// Insert messages
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO session_messages(session_id, role, content, name, created_at)
 		VALUES(?, ?, ?, ?, ?)
@@ -190,8 +266,7 @@ func (s *SQLiteStore) AppendMessages(ctx context.Context, sessionID string, msgs
 			name = sql.NullString{String: msg.Name, Valid: true}
 		}
 
-		_, err := stmt.ExecContext(ctx, sessionID, msg.Role, msg.Content, name, now)
-		if err != nil {
+		if _, err := stmt.ExecContext(ctx, sessionID, msg.Role, msg.Content, name, now); err != nil {
 			return err
 		}
 	}
@@ -344,7 +419,6 @@ func (s *SQLiteStore) CleanupOldSessions(ctx context.Context, olderThan time.Dur
 
 // Verify interface compliance at compile time
 var (
-	_ session.LegacySessionStore        = (*SQLiteStore)(nil)
-	_ session.SessionStoreWithLifecycle = (*SQLiteStore)(nil)
-	_ session.SessionStoreWithMeta      = (*SQLiteStore)(nil)
+	_ session.SessionStore         = (*SQLiteStore)(nil)
+	_ session.SessionStoreAppender = (*SQLiteStore)(nil)
 )

@@ -17,9 +17,10 @@ import (
 )
 
 const (
-	providerName = "dify"
-	firstPrompt  = "请记住：我最喜欢的编程语言是 Go。"
-	secondPrompt = "我最喜欢的编程语言是什么？"
+	providerName      = "dify"
+	firstPrompt       = "请记住：我最喜欢的编程语言是 Go。"
+	secondPrompt      = "我最喜欢的编程语言是什么？"
+	streamOutput bool = true
 )
 
 func main() {
@@ -81,7 +82,10 @@ func example1_NoStore(cli *client.Client, ctx context.Context) {
 		client.WithHistoryMode(client.HistoryAuto),
 	)
 
-	resp1, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("第一次回答: ")
+	}
+	text1, err := chat(ctx, sess, base.ChatRequest{
 		Messages: []base.Message{{
 			Role:    "user",
 			Content: firstPrompt,
@@ -91,23 +95,30 @@ func example1_NoStore(cli *client.Client, ctx context.Context) {
 		log.Printf("Error: %v", err)
 		return
 	}
-	fmt.Printf("第一次回答: %s\n", resp1.Text)
+	if !streamOutput {
+		fmt.Printf("第一次回答: %s\n", text1)
+	}
 	fmt.Printf("conversation_id: %s (自动提取)\n", sess.ID())
 
 	// 无 SessionStore 时，需要手动携带历史上下文
 	history := []base.Message{
 		{Role: "user", Content: firstPrompt},
-		{Role: "assistant", Content: resp1.Text},
+		{Role: "assistant", Content: text1},
 	}
 
-	resp2, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("第二次回答: ")
+	}
+	text2, err := chat(ctx, sess, base.ChatRequest{
 		Messages: append(history, base.Message{Role: "user", Content: secondPrompt}),
 	})
 	if err != nil {
 		log.Printf("Error: %v", err)
 		return
 	}
-	fmt.Printf("第二次回答: %s\n", resp2.Text)
+	if !streamOutput {
+		fmt.Printf("第二次回答: %s\n", text2)
+	}
 }
 
 func example2_MemoryStore(cli *client.Client, ctx context.Context) {
@@ -119,7 +130,10 @@ func example2_MemoryStore(cli *client.Client, ctx context.Context) {
 		client.WithHistoryMode(client.HistoryAuto), // 多轮：自动加载历史
 	)
 
-	resp1, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("第一次回答: ")
+	}
+	text1, err := chat(ctx, sess, base.ChatRequest{
 		Messages: []base.Message{{
 			Role:    "user",
 			Content: firstPrompt,
@@ -129,10 +143,15 @@ func example2_MemoryStore(cli *client.Client, ctx context.Context) {
 		log.Printf("Error: %v", err)
 		return
 	}
-	fmt.Printf("第一次回答: %s\n", resp1.Text)
+	if !streamOutput {
+		fmt.Printf("第一次回答: %s\n", text1)
+	}
 	fmt.Printf("conversation_id: %s (自动提取)\n", sess.ID())
 
-	resp2, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("第二次回答: ")
+	}
+	text2, err := chat(ctx, sess, base.ChatRequest{
 		Messages: []base.Message{{
 			Role:    "user",
 			Content: secondPrompt,
@@ -142,7 +161,9 @@ func example2_MemoryStore(cli *client.Client, ctx context.Context) {
 		log.Printf("Error: %v", err)
 		return
 	}
-	fmt.Printf("第二次回答: %s\n", resp2.Text)
+	if !streamOutput {
+		fmt.Printf("第二次回答: %s\n", text2)
+	}
 	fmt.Printf("会话ID: %s (已保存到Memory)\n", sess.ID())
 }
 
@@ -157,7 +178,10 @@ func example3_FileStore(cli *client.Client, ctx context.Context) {
 		client.WithHistoryMode(client.HistoryAuto),
 	)
 
-	resp1, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("第一次回答: ")
+	}
+	text1, err := chat(ctx, sess, base.ChatRequest{
 		Messages: []base.Message{{
 			Role:    "user",
 			Content: firstPrompt,
@@ -167,10 +191,15 @@ func example3_FileStore(cli *client.Client, ctx context.Context) {
 		log.Printf("Error: %v", err)
 		return
 	}
-	fmt.Printf("第一次回答: %s\n", resp1.Text)
+	if !streamOutput {
+		fmt.Printf("第一次回答: %s\n", text1)
+	}
 	fmt.Printf("conversation_id: %s (自动提取)\n", sess.ID())
 
-	resp2, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("第二次回答: ")
+	}
+	text2, err := chat(ctx, sess, base.ChatRequest{
 		Messages: []base.Message{{
 			Role:    "user",
 			Content: secondPrompt,
@@ -180,7 +209,9 @@ func example3_FileStore(cli *client.Client, ctx context.Context) {
 		log.Printf("Error: %v", err)
 		return
 	}
-	fmt.Printf("第二次回答: %s\n", resp2.Text)
+	if !streamOutput {
+		fmt.Printf("第二次回答: %s\n", text2)
+	}
 	fmt.Printf("会话ID: %s (已保存到 /tmp/sessions/)\n", sess.ID())
 }
 
@@ -200,7 +231,10 @@ func example4_SQLiteStore(cli *client.Client, ctx context.Context) {
 		client.WithHistoryMode(client.HistoryAuto),
 	)
 
-	resp1, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("第一次回答: ")
+	}
+	text1, err := chat(ctx, sess, base.ChatRequest{
 		Messages: []base.Message{{
 			Role:    "user",
 			Content: firstPrompt,
@@ -210,10 +244,15 @@ func example4_SQLiteStore(cli *client.Client, ctx context.Context) {
 		log.Printf("Error: %v", err)
 		return
 	}
-	fmt.Printf("第一次回答: %s\n", resp1.Text)
+	if !streamOutput {
+		fmt.Printf("第一次回答: %s\n", text1)
+	}
 	fmt.Printf("conversation_id: %s (自动提取)\n", sess.ID())
 
-	resp2, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("第二次回答: ")
+	}
+	text2, err := chat(ctx, sess, base.ChatRequest{
 		Messages: []base.Message{{
 			Role:    "user",
 			Content: secondPrompt,
@@ -223,7 +262,9 @@ func example4_SQLiteStore(cli *client.Client, ctx context.Context) {
 		log.Printf("Error: %v", err)
 		return
 	}
-	fmt.Printf("第二次回答: %s\n", resp2.Text)
+	if !streamOutput {
+		fmt.Printf("第二次回答: %s\n", text2)
+	}
 	fmt.Printf("会话ID: %s (已保存到SQLite)\n", sess.ID())
 }
 
@@ -258,6 +299,34 @@ func example7_RedisStore(_ *client.Client, _ context.Context) {
 	// 	return
 	// }
 	// defer store.Close()
+}
+
+func chat(ctx context.Context, sess *client.Session, req base.ChatRequest) (string, error) {
+	if !streamOutput {
+		resp, err := sess.Chat(ctx, req)
+		if err != nil {
+			return "", err
+		}
+		return resp.Text, nil
+	}
+
+	stream, err := sess.ChatStream(ctx, req)
+	if err != nil {
+		return "", err
+	}
+
+	var fullText string
+	for chunk := range stream {
+		if chunk.Error != nil {
+			return "", chunk.Error
+		}
+		if chunk.Text != "" {
+			fmt.Print(chunk.Text)
+			fullText += chunk.Text
+		}
+	}
+	fmt.Println()
+	return fullText, nil
 }
 
 func loadLocalConfig(cli *client.Client) error {

@@ -14,7 +14,10 @@ import (
 	_ "github.com/Michaelxwb/ai-api-sdk/provider"
 )
 
-const promptText = "什么是Go语言？"
+const (
+	promptText        = "什么是Go语言？"
+	streamOutput bool = false
+)
 
 func main() {
 	cli := client.New()
@@ -87,7 +90,10 @@ func example1_NoStore(cli *client.Client, ctx context.Context, cred *auth.Creden
 		client.WithHistoryMode(client.HistoryNone),
 	)
 
-	resp, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("回答: ")
+	}
+	text, err := chat(ctx, sess, base.ChatRequest{
 		Messages: []base.Message{{
 			Role:    "user",
 			Content: promptText,
@@ -98,7 +104,9 @@ func example1_NoStore(cli *client.Client, ctx context.Context, cred *auth.Creden
 		return
 	}
 
-	fmt.Printf("回答: %s\n", resp.Text)
+	if !streamOutput {
+		fmt.Printf("回答: %s\n", text)
+	}
 	fmt.Printf("conversation_id: %s (自动提取)\n", sess.ID())
 }
 
@@ -112,7 +120,10 @@ func example2_MemoryStore(cli *client.Client, ctx context.Context, cred *auth.Cr
 		client.WithHistoryMode(client.HistoryNone), // 单轮：仅持久化，不加载历史
 	)
 
-	resp, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("回答: ")
+	}
+	text, err := chat(ctx, sess, base.ChatRequest{
 		Messages: []base.Message{{
 			Role:    "user",
 			Content: promptText,
@@ -123,7 +134,9 @@ func example2_MemoryStore(cli *client.Client, ctx context.Context, cred *auth.Cr
 		return
 	}
 
-	fmt.Printf("回答: %s\n", resp.Text)
+	if !streamOutput {
+		fmt.Printf("回答: %s\n", text)
+	}
 	fmt.Printf("conversation_id: %s (已保存到Memory)\n", sess.ID())
 }
 
@@ -139,7 +152,10 @@ func example3_FileStore(cli *client.Client, ctx context.Context, cred *auth.Cred
 		client.WithHistoryMode(client.HistoryNone),
 	)
 
-	resp, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("回答: ")
+	}
+	text, err := chat(ctx, sess, base.ChatRequest{
 		Messages: []base.Message{{
 			Role:    "user",
 			Content: promptText,
@@ -150,7 +166,9 @@ func example3_FileStore(cli *client.Client, ctx context.Context, cred *auth.Cred
 		return
 	}
 
-	fmt.Printf("回答: %s\n", resp.Text)
+	if !streamOutput {
+		fmt.Printf("回答: %s\n", text)
+	}
 	fmt.Printf("conversation_id: %s (已保存到 /tmp/sessions/)\n", sess.ID())
 }
 
@@ -171,7 +189,10 @@ func example4_SQLiteStore(cli *client.Client, ctx context.Context, cred *auth.Cr
 		client.WithHistoryMode(client.HistoryNone),
 	)
 
-	resp, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("回答: ")
+	}
+	text, err := chat(ctx, sess, base.ChatRequest{
 		Messages: []base.Message{{
 			Role:    "user",
 			Content: promptText,
@@ -182,7 +203,9 @@ func example4_SQLiteStore(cli *client.Client, ctx context.Context, cred *auth.Cr
 		return
 	}
 
-	fmt.Printf("回答: %s\n", resp.Text)
+	if !streamOutput {
+		fmt.Printf("回答: %s\n", text)
+	}
 	fmt.Printf("conversation_id: %s (已保存到SQLite)\n", sess.ID())
 }
 
@@ -217,4 +240,32 @@ func example7_RedisStore(_ *client.Client, _ context.Context, _ *auth.Credential
 	// 	return
 	// }
 	// defer store.Close()
+}
+
+func chat(ctx context.Context, sess *client.Session, req base.ChatRequest) (string, error) {
+	if !streamOutput {
+		resp, err := sess.Chat(ctx, req)
+		if err != nil {
+			return "", err
+		}
+		return resp.Text, nil
+	}
+
+	stream, err := sess.ChatStream(ctx, req)
+	if err != nil {
+		return "", err
+	}
+
+	var fullText string
+	for chunk := range stream {
+		if chunk.Error != nil {
+			return "", chunk.Error
+		}
+		if chunk.Text != "" {
+			fmt.Print(chunk.Text)
+			fullText += chunk.Text
+		}
+	}
+	fmt.Println()
+	return fullText, nil
 }

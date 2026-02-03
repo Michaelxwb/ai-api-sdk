@@ -43,16 +43,16 @@
 ### 1.2 数据流向
 
 #### 非流式对话数据流
-1. 用户代码构造 `ChatRequest` 并调用 `Client.Chat` / `Client.ChatWith`。
+1. 用户代码构造 `ChatRequest` 并调用 `Session.Chat`（平台集成可通过 `NewSessionWith` 创建 Session）。
 2. Client 解析 Provider 配置、注入认证（`AuthTransport`），构建 HTTP 请求。
 3. Provider Spec 处理请求与响应：`BuildRequest` → HTTP → `ParseResponse`。
 4. Client 返回 `ChatResponse` 给用户代码。
 
 #### 流式对话数据流
-1. 用户调用 `Client.ChatStream` / `Client.ChatWithStream`。
+1. 用户调用 `Session.ChatStream`（平台集成可通过 `NewSessionWith` 创建 Session）。
 2. Provider 返回 HTTP streaming 响应（SSE/NDJSON）。
 3. 通用解析器 (`SSEParser` / `NDJSONParser`) 解析为 `StreamChunk`。
-4. Client 将 `StreamChunk` 透传给用户，必要时可在 `ChatStreamSync` 聚合。
+4. Client 将 `StreamChunk` 透传给用户，必要时可在 `Session.Chat` 聚合。
 
 #### 多轮对话数据流
 1. Client 从 `SessionStore` 拉取历史消息。
@@ -75,28 +75,28 @@
 ## 2. 核心流程
 
 ### 2.1 非流式单轮对话
-1. 用户调用 `Client.Chat` 或 `Client.ChatWith`。
+1. 用户调用 `Session.Chat`（平台集成可通过 `NewSessionWith` 创建 Session）。
 2. Client 解析 Provider 配置与 Credential，构建 HTTP 请求。
 3. `AuthTransport` 注入认证并发送请求。
 4. Provider `ParseResponse` 解析结果为 `ChatResponse`。
 5. 返回给用户。
 
 ### 2.2 流式单轮对话
-1. 用户调用 `Client.ChatStream` 或 `Client.ChatWithStream`。
+1. 用户调用 `Session.ChatStream`（平台集成可通过 `NewSessionWith` 创建 Session）。
 2. Provider 返回 SSE/NDJSON stream。
 3. 通用解析器解析 chunk → `StreamChunk`。
-4. Client 转发给用户，或在 `ChatStreamSync` 中聚合成 `ChatResponse`。
+4. Client 转发给用户，或由 `Session.Chat` 聚合成 `ChatResponse`。
 
 ### 2.3 非流式多轮对话
-1. `Client.ChatSession` 拉取历史消息（`SessionStore.GetMessages`）。
+1. `Session.Chat` 拉取历史消息（`SessionStore.GetMessages`）。
 2. 合并新消息并执行截断（`TruncatePolicy`）。
 3. 发送请求并获取 `ChatResponse`。
 4. 将用户消息与 AI 回复追加到 `SessionStore`。
 5. 视情况更新 `SessionMeta`。
 
 ### 2.4 流式多轮对话
-1. `Client.ChatSessionStream` 拉取历史 → 合并 → 截断。
-2. `Client.ChatStream` 触发流式请求。
+1. `Session.ChatStream` 拉取历史 → 合并 → 截断。
+2. `Session.ChatStream` 触发流式请求。
 3. Stream 中持续输出 `StreamChunk` 给用户，同时在客户端累积完整文本。
 4. 结束后将用户消息 + 完整回复写入 `SessionStore`。
 
@@ -112,7 +112,7 @@ sequenceDiagram
     participant Parser as 通用解析器
     participant API as AI API
 
-    User->>Client: ChatSessionStream(ctx, provider, sessionID, req)
+    User->>Client: Session.ChatStream(ctx, req)
     Client->>Session: GetMessages(sessionID)
     Session-->>Client: 历史消息
     Client->>Client: 合并历史 + 新消息
@@ -170,7 +170,7 @@ sequenceDiagram
 
 #### ChatResponse
 - 字段：`Text` / `SessionID` / `Usage` / `Raw`。
-- 流转：Provider.ParseResponse 或 `ChatStreamSync` 聚合 → 用户代码。
+- 流转：Provider.ParseResponse 或 `Session.Chat` 聚合 → 用户代码。
 
 #### Message
 - 字段：`Role` / `Content` / `Name`。
@@ -181,7 +181,7 @@ sequenceDiagram
 - 网络/HTTP 错误：直接返回给调用方，且在本地配置模式下会触发 `AuthManager.MarkFailed`。
 - 流式解析错误：以 `StreamChunk.Error` 下发，并提前终止流。
 - 会话存储错误：通过 `SessionConfig.OnStoreError` 回调，并将错误返回给调用方。
-- 乐观锁冲突：`ErrSessionConflict` 可在 `ChatSession` 中按 `MaxConflictRetry` 重试。
+- 乐观锁冲突：`ErrSessionConflict` 可在 `Session.Chat` 中按 `MaxConflictRetry` 重试。
 - `context.Context` 从用户入口传递到 `BuildRequest` 与 HTTP 请求。
 - 流式解析器通过 `resp.Request.Context()` 获取取消信号。
 - 若 ctx 被取消，解析器发送 `StreamChunk{Error: ctx.Err()}` 并停止。
@@ -254,7 +254,6 @@ sequenceDiagram
 
 ## 相关文档
 - [文档索引](README.md)
-- [数据流详解](data-flow.md) - 已合并到架构文档，保留链接用于兼容
-- [使用指南](usage-guide.md)
-- [Session 教程](session-tutorial.md)
-- [API 参考](api-reference.md)
+- [API 使用指南](api-guide.md)
+- [Session 完整指南](session-guide.md)
+- [Session 架构设计](design-session-unified-architecture.md)

@@ -25,11 +25,16 @@ providers:
   # Local vLLM (OpenAI-compatible)
   - name: "vllm_local"
     type: "openai_compat"
-    base_url: "https://ollama.iepose.cn/v1"
+    base_url: "https://integrate.api.nvidia.com/v1"
     auth_ref: "vllm_bearer"
 
   # OpenAI cloud
   - name: "openai_cloud"
+    type: "openai"
+    auth_ref: "openai_key"
+
+  # OpenAI cloud (alias for simple examples)
+  - name: "openai"
     type: "openai"
     auth_ref: "openai_key"
 
@@ -77,7 +82,7 @@ credentials:
   - id: "vllm_bearer"
     provider: "openai_compat"
     auth_type: "bearer_token"
-    access_token: "SK-TOKEN"
+    access_token: "SK-TOKEN-JJ"
 
   - id: "openai_key"
     provider: "openai"
@@ -107,4 +112,4 @@ credentials:
   - id: "dify_key"
     provider: "dify"
     auth_type: "api_key"
-    api_key: "app-REPLACE"
+    api_key: "app-lwrLMC2HKTjz1jDLq2T02i4l"

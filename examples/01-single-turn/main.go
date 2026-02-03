@@ -21,6 +21,7 @@ const (
 	providerName = "vllm_local"
 	modelName    = "minimaxai/minimax-m2.1"
 	promptText   = "什么是Go语言？"
+	streamOutput = true
 )
 
 func main() {
@@ -63,21 +64,21 @@ func main() {
 	// ========================================
 	// 场景5：MySQL SessionStore（需要配置）
 	// ========================================
-	// fmt.Println("\n场景5：MySQL SessionStore")
+	// fmt.Println("\n场景5：=========================MySQL SessionStore=========================")
 	// example5_MySQLStore(cli, ctx)
 	//time.Sleep(10 * time.Second)
 
 	// ========================================
 	// 场景6：PostgreSQL SessionStore（需要配置）
 	// ========================================
-	// fmt.Println("\n场景6：PostgreSQL SessionStore")
+	// fmt.Println("\n场景6：=========================PostgreSQL SessionStore=========================")
 	// example6_PostgreSQLStore(cli, ctx)
 	//time.Sleep(10 * time.Second)
 
 	// ========================================
 	// 场景7：Redis SessionStore（需要配置）
 	// ========================================
-	// fmt.Println("\n场景7：Redis SessionStore")
+	// fmt.Println("\n场景7：=========================Redis SessionStore=========================")
 	// example7_RedisStore(cli, ctx)
 }
 
@@ -87,7 +88,10 @@ func example1_NoStore(cli *client.Client, ctx context.Context) {
 		client.WithHistoryMode(client.HistoryNone),
 	)
 
-	resp, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("回答: ")
+	}
+	text, err := chat(ctx, sess, base.ChatRequest{
 		Model: modelName,
 		Messages: []base.Message{{
 			Role:    "user",
@@ -99,7 +103,9 @@ func example1_NoStore(cli *client.Client, ctx context.Context) {
 		return
 	}
 
-	fmt.Printf("回答: %s\n", resp.Text)
+	if !streamOutput {
+		fmt.Printf("回答: %s\n", text)
+	}
 }
 
 func example2_MemoryStore(cli *client.Client, ctx context.Context) {
@@ -112,7 +118,10 @@ func example2_MemoryStore(cli *client.Client, ctx context.Context) {
 		client.WithAutoID(),
 	)
 
-	resp, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("回答: ")
+	}
+	text, err := chat(ctx, sess, base.ChatRequest{
 		Model: modelName,
 		Messages: []base.Message{{
 			Role:    "user",
@@ -124,7 +133,9 @@ func example2_MemoryStore(cli *client.Client, ctx context.Context) {
 		return
 	}
 
-	fmt.Printf("回答: %s\n", resp.Text)
+	if !streamOutput {
+		fmt.Printf("回答: %s\n", text)
+	}
 	fmt.Printf("会话ID: %s (已保存到Memory)\n", sess.ID())
 }
 
@@ -140,7 +151,10 @@ func example3_FileStore(cli *client.Client, ctx context.Context) {
 		client.WithAutoID(),
 	)
 
-	resp, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("回答: ")
+	}
+	text, err := chat(ctx, sess, base.ChatRequest{
 		Model: modelName,
 		Messages: []base.Message{{
 			Role:    "user",
@@ -152,8 +166,10 @@ func example3_FileStore(cli *client.Client, ctx context.Context) {
 		return
 	}
 
-	fmt.Printf("回答: %s\n", resp.Text)
-	fmt.Printf("会话ID: %s (已保存到 /tmp/sessions/)\n", sess.ID())
+	if !streamOutput {
+		fmt.Printf("回答: %s\n", text)
+	}
+	fmt.Printf("会话ID: %s (已保存到 examples/)\n", sess.ID())
 }
 
 func example4_SQLiteStore(cli *client.Client, ctx context.Context) {
@@ -173,7 +189,10 @@ func example4_SQLiteStore(cli *client.Client, ctx context.Context) {
 		client.WithAutoID(),
 	)
 
-	resp, err := sess.Chat(ctx, base.ChatRequest{
+	if streamOutput {
+		fmt.Print("回答: ")
+	}
+	text, err := chat(ctx, sess, base.ChatRequest{
 		Model: modelName,
 		Messages: []base.Message{{
 			Role:    "user",
@@ -185,7 +204,9 @@ func example4_SQLiteStore(cli *client.Client, ctx context.Context) {
 		return
 	}
 
-	fmt.Printf("回答: %s\n", resp.Text)
+	if !streamOutput {
+		fmt.Printf("回答: %s\n", text)
+	}
 	fmt.Printf("会话ID: %s (已保存到SQLite)\n", sess.ID())
 }
 
@@ -220,6 +241,34 @@ func example7_RedisStore(_ *client.Client, _ context.Context) {
 	// 	return
 	// }
 	// defer store.Close()
+}
+
+// chat 根据 streamOutput 常量选择流式或非流式调用，返回响应文本
+func chat(ctx context.Context, sess *client.Session, req base.ChatRequest) (string, error) {
+	if !streamOutput {
+		resp, err := sess.Chat(ctx, req)
+		if err != nil {
+			return "", err
+		}
+		return resp.Text, nil
+	}
+
+	stream, err := sess.ChatStream(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	var fullText string
+	for chunk := range stream {
+		if chunk.Error != nil {
+			return fullText, chunk.Error
+		}
+		if chunk.Text != "" {
+			fmt.Print(chunk.Text)
+			fullText += chunk.Text
+		}
+	}
+	fmt.Println()
+	return fullText, nil
 }
 
 func loadLocalConfig(cli *client.Client) error {

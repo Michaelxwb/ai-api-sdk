@@ -389,7 +389,10 @@ const markdownTemplate = "# {{ .PlatformName }} 平台配置文档\n\n" +
 	"    cfg = New{{ .FuncName }}Config()\n\n" +
 	"    // 初始化凭证管理器\n" +
 	"    authStore := auth.NewFileStore(cfg.Auth.Store.Path)\n" +
-	"    mgr, _ := auth.NewManager(authStore, &auth.RoundRobinSelector{})\n\n" +
+	"    mgr, _ := auth.NewManager(authStore, &auth.RoundRobinSelector{})\n" +
+	"    for _, cred := range cfg.Credentials {\n" +
+	"        mgr.Register(cred)\n" +
+	"    }\n\n" +
 	"    // 创建客户端\n" +
 	"    cli := client.NewClient(cfg, mgr)\n\n" +
 	"    // 发起请求\n" +

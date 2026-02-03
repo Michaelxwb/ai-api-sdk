@@ -8,12 +8,11 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/Michaelxwb/ai-api-sdk/provider/base"
 	"github.com/Michaelxwb/ai-api-sdk/session"
 	"github.com/go-sql-driver/mysql"
 )
 
-// MySQLStore implements session.LegacySessionStore using MySQL database.
+// MySQLStore implements session.SessionStore using MySQL database.
 // Suitable for production deployments requiring proven relational database.
 //
 // Features:
@@ -92,104 +91,121 @@ func (s *MySQLStore) Close() error {
 	return s.db.Close()
 }
 
-// GetMessages retrieves message history for a session.
-// Implements session.LegacySessionStore interface.
-func (s *MySQLStore) GetMessages(ctx context.Context, sessionID string, opts session.GetOptions) ([]base.Message, error) {
-	query := `
-		SELECT role, content, name
-		FROM session_messages
-		WHERE session_id = ?
-		ORDER BY id ASC
-	`
+// Get retrieves a full session state.
+func (s *MySQLStore) Get(ctx context.Context, sessionID string) (*session.SessionState, error) {
+	var meta session.SessionMeta
+	var attrsJSON []byte
 
-	if opts.MaxMessages > 0 {
-		// Get last N messages
-		query = `
-			SELECT role, content, name
-			FROM session_messages
-			WHERE session_id = ?
-			ORDER BY id DESC
-			LIMIT ?
-		`
+	err := s.db.QueryRowContext(ctx, `
+		SELECT id, provider, model, created_at, updated_at, attrs
+		FROM sessions
+		WHERE id = ?
+	`, sessionID).Scan(&meta.ID, &meta.Provider, &meta.Model, &meta.CreatedAt, &meta.UpdatedAt, &attrsJSON)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, session.ErrSessionNotFound
+		}
+		return nil, err
 	}
 
-	var rows *sql.Rows
-	var err error
-
-	if opts.MaxMessages > 0 {
-		rows, err = s.db.QueryContext(ctx, query, sessionID, opts.MaxMessages)
-	} else {
-		rows, err = s.db.QueryContext(ctx, query, sessionID)
+	if len(attrsJSON) > 0 {
+		if err := json.Unmarshal(attrsJSON, &meta.Attrs); err != nil {
+			return nil, err
+		}
 	}
 
+	messages, err := s.fetchMessages(ctx, s.db, sessionID)
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
 
-	var messages []base.Message
-	for rows.Next() {
-		var msg base.Message
-		var name sql.NullString
-
-		if err := rows.Scan(&msg.Role, &msg.Content, &name); err != nil {
-			return nil, err
-		}
-
-		if name.Valid {
-			msg.Name = name.String
-		}
-
-		messages = append(messages, msg)
+	state := &session.SessionState{
+		ID:       sessionID,
+		Messages: messages,
 	}
-
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-
-	// Reverse if we got last N messages
-	if opts.MaxMessages > 0 && len(messages) > 0 {
-		for i, j := 0, len(messages)-1; i < j; i, j = i+1, j-1 {
-			messages[i], messages[j] = messages[j], messages[i]
-		}
-	}
-
-	// Handle KeepSystemPrompt
-	if opts.KeepSystemPrompt && len(messages) > 0 {
-		if messages[0].Role == "system" {
-			// System prompt already first, do nothing
-		} else {
-			// Try to find system prompt in full history
-			var systemPrompt *base.Message
-			row := s.db.QueryRowContext(ctx, `
-				SELECT role, content, name
-				FROM session_messages
-				WHERE session_id = ? AND role = 'system'
-				ORDER BY id ASC
-				LIMIT 1
-			`, sessionID)
-
-			var msg base.Message
-			var name sql.NullString
-			if err := row.Scan(&msg.Role, &msg.Content, &name); err == nil {
-				if name.Valid {
-					msg.Name = name.String
-				}
-				systemPrompt = &msg
-			}
-
-			if systemPrompt != nil {
-				messages = append([]base.Message{*systemPrompt}, messages...)
-			}
-		}
-	}
-
-	return messages, nil
+	applyStoredMeta(state, &meta)
+	return state, nil
 }
 
-// AppendMessages adds new messages to a session.
-// Implements session.LegacySessionStore interface.
-func (s *MySQLStore) AppendMessages(ctx context.Context, sessionID string, msgs []base.Message) error {
+// Save writes the provided session state.
+func (s *MySQLStore) Save(ctx context.Context, state *session.SessionState) error {
+	if state == nil {
+		return errors.New("session store: nil state")
+	}
+	if state.ID == "" {
+		return errors.New("session store: missing session id")
+	}
+
+	now := time.Now()
+	if state.CreatedAt.IsZero() {
+		state.CreatedAt = now
+	}
+	state.UpdatedAt = now
+
+	meta := metaFromState(state)
+	var attrsJSON []byte
+	if meta != nil && meta.Attrs != nil {
+		var err error
+		attrsJSON, err = json.Marshal(meta.Attrs)
+		if err != nil {
+			return err
+		}
+	}
+
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	_, err = tx.ExecContext(ctx, `
+		INSERT INTO sessions (id, provider, model, created_at, updated_at, attrs)
+		VALUES (?, ?, ?, ?, ?, ?)
+		ON DUPLICATE KEY UPDATE
+			provider = VALUES(provider),
+			model = VALUES(model),
+			updated_at = VALUES(updated_at),
+			attrs = VALUES(attrs)
+	`, state.ID, meta.Provider, meta.Model, state.CreatedAt, state.UpdatedAt, attrsJSON)
+	if err != nil {
+		return err
+	}
+
+	existing, err := s.fetchMessages(ctx, tx, state.ID)
+	if err != nil {
+		return err
+	}
+
+	if isMessagePrefix(existing, state.Messages) {
+		delta := state.Messages[len(existing):]
+		if len(delta) > 0 {
+			if err := s.insertMessagesTx(ctx, tx, state.ID, delta); err != nil {
+				return err
+			}
+		}
+		return tx.Commit()
+	}
+
+	if _, err := tx.ExecContext(ctx, "DELETE FROM session_messages WHERE session_id = ?", state.ID); err != nil {
+		return err
+	}
+	if len(state.Messages) > 0 {
+		if err := s.insertMessagesTx(ctx, tx, state.ID, state.Messages); err != nil {
+			return err
+		}
+	}
+
+	return tx.Commit()
+}
+
+// Delete removes a session and all its messages.
+func (s *MySQLStore) Delete(ctx context.Context, sessionID string) error {
+	return s.DeleteSession(ctx, sessionID)
+}
+
+// Append appends messages to an existing session.
+func (s *MySQLStore) Append(ctx context.Context, sessionID string, msgs ...session.Message) error {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -200,18 +216,66 @@ func (s *MySQLStore) AppendMessages(ctx context.Context, sessionID string, msgs 
 	}
 	defer tx.Rollback()
 
-	// Ensure session exists
 	var exists bool
-	err = tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?)", sessionID).Scan(&exists)
-	if err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT EXISTS(SELECT 1 FROM sessions WHERE id = ?)", sessionID).Scan(&exists); err != nil {
 		return err
 	}
-
 	if !exists {
 		return session.ErrSessionNotFound
 	}
 
-	// Insert messages
+	if err := s.insertMessagesTx(ctx, tx, sessionID, msgs); err != nil {
+		return err
+	}
+
+	if _, err := tx.ExecContext(ctx, "UPDATE sessions SET updated_at = ? WHERE id = ?", time.Now(), sessionID); err != nil {
+		return err
+	}
+
+	return tx.Commit()
+}
+
+type mysqlMessageQueryer interface {
+	QueryContext(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+}
+
+func (s *MySQLStore) fetchMessages(ctx context.Context, queryer mysqlMessageQueryer, sessionID string) ([]session.Message, error) {
+	rows, err := queryer.QueryContext(ctx, `
+		SELECT role, content, name
+		FROM session_messages
+		WHERE session_id = ?
+		ORDER BY id ASC
+	`, sessionID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var messages []session.Message
+	for rows.Next() {
+		var msg session.Message
+		var name sql.NullString
+
+		if err := rows.Scan(&msg.Role, &msg.Content, &name); err != nil {
+			return nil, err
+		}
+		if name.Valid {
+			msg.Name = name.String
+		}
+		messages = append(messages, msg)
+	}
+
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return messages, nil
+}
+
+func (s *MySQLStore) insertMessagesTx(ctx context.Context, tx *sql.Tx, sessionID string, msgs []session.Message) error {
+	if len(msgs) == 0 {
+		return nil
+	}
+
 	stmt, err := tx.PrepareContext(ctx, `
 		INSERT INTO session_messages (session_id, role, content, name, created_at)
 		VALUES (?, ?, ?, ?, ?)
@@ -227,18 +291,11 @@ func (s *MySQLStore) AppendMessages(ctx context.Context, sessionID string, msgs 
 		if msg.Name != "" {
 			name = msg.Name
 		}
-
 		if _, err := stmt.ExecContext(ctx, sessionID, msg.Role, msg.Content, name, now); err != nil {
 			return err
 		}
 	}
-
-	// Update session timestamp
-	if _, err := tx.ExecContext(ctx, "UPDATE sessions SET updated_at = ? WHERE id = ?", now, sessionID); err != nil {
-		return err
-	}
-
-	return tx.Commit()
+	return nil
 }
 
 // CreateSession creates a new session with metadata.
@@ -407,3 +464,8 @@ func (s *MySQLStore) CleanupOldSessions(ctx context.Context, olderThan time.Dura
 
 	return result.RowsAffected()
 }
+
+var (
+	_ session.SessionStore         = (*MySQLStore)(nil)
+	_ session.SessionStoreAppender = (*MySQLStore)(nil)
+)

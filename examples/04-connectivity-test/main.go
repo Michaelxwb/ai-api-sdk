@@ -16,8 +16,8 @@ import (
 )
 
 const (
-	providerName = "openai"
-	modelName    = "gpt-3.5-turbo"
+	providerName = "vllm_local"
+	modelName    = "minimaxai/minimax-m2.1"
 )
 
 func main() {
@@ -29,13 +29,13 @@ func main() {
 	// ========================================
 	// 场景1：Test() - 本地配置模式
 	// ========================================
-	fmt.Println("场景1：Test() - 本地配置模式")
+	fmt.Println("场景1：=========================Test() - 本地配置模式=========================")
 	testLocalConfig(cli, ctx)
 
 	// ========================================
 	// 场景2：TestWith() - 平台集成模式
 	// ========================================
-	fmt.Println("\n场景2：TestWith() - 平台集成模式")
+	fmt.Println("\n场景2：=========================TestWith() - 平台集成模式=========================")
 	testPlatformIntegration(cli, ctx)
 }
 
@@ -62,15 +62,15 @@ func testLocalConfig(cli *client.Client, ctx context.Context) {
 func testPlatformIntegration(cli *client.Client, ctx context.Context) {
 	cred := &auth.Credential{
 		ID:       "test-cred",
-		Provider: "openai",
+		Provider: "openai_compat",
 		AuthType: auth.AuthTypeAPIKey,
-		APIKey:   "sk-...",
+		APIKey:   "SK-TOKEN-JJ",
 	}
 
 	pc := &config.ProviderConfig{
-		Name:    "openai",
-		Type:    "openai",
-		BaseURL: "https://api.openai.com/v1",
+		Name:    "vllm_local",
+		Type:    "openai_compat",
+		BaseURL: "https://integrate.api.nvidia.com/v1",
 	}
 
 	result, err := cli.TestWith(ctx, cred, pc, &client.TestOptions{

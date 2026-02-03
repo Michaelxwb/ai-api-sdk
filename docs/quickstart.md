@@ -79,7 +79,7 @@ func main() {
 - ✅ 凭证有效性
 - ✅ 模型可用性
 
-完整示例请参考 [examples/09-connectivity-test](../examples/09-connectivity-test/)
+完整示例请参考 [examples/04-connectivity-test](../examples/04-connectivity-test/)
 
 ## 3. 第一个请求（非流式）
 
@@ -109,7 +109,7 @@ func main() {
 
     cli := client.NewClient(cfg, mgr)
 
-    resp, err := cli.Chat(context.Background(), "openai", base.ChatRequest{
+    resp, err := cli.NewSession("openai").Chat(context.Background(), base.ChatRequest{
         Model:    "gpt-4o-mini",
         Messages: []base.Message{{Role: "user", Content: "Hello!"}},
     })
@@ -123,7 +123,7 @@ func main() {
 ## 4. 流式对话
 
 ```go
-stream, err := cli.ChatStream(context.Background(), "openai", base.ChatRequest{
+stream, err := cli.NewSession("openai").ChatStream(context.Background(), base.ChatRequest{
     Model:    "gpt-4o-mini",
     Messages: []base.Message{{Role: "user", Content: "用三句话介绍 Go"}},
 })
@@ -138,7 +138,7 @@ for chunk := range stream {
 }
 ```
 
-如果你更喜欢同步返回，可使用 `ChatStreamSync()`。
+如果你更喜欢同步返回，可直接使用 `Session.Chat()`。
 
 ## 5. 多轮对话（最小示例）
 
@@ -159,12 +159,12 @@ cli.SessionConfig = client.SessionConfig{
 
 sessionID := "user-001"
 
-resp1, _ := cli.ChatSessionStreamSync(context.Background(), "openai", sessionID, base.ChatRequest{
+resp1, _ := cli.NewSession("openai", client.WithID(sessionID)).Chat(context.Background(), base.ChatRequest{
     Model:    "gpt-4o-mini",
     Messages: []base.Message{{Role: "user", Content: "介绍一下 Go 语言"}},
 })
 
-resp2, _ := cli.ChatSessionStreamSync(context.Background(), "openai", sessionID, base.ChatRequest{
+resp2, _ := cli.NewSession("openai", client.WithID(sessionID)).Chat(context.Background(), base.ChatRequest{
     Model:    "gpt-4o-mini",
     Messages: []base.Message{{Role: "user", Content: "它的并发模型是什么？"}},
 })
@@ -173,7 +173,7 @@ fmt.Println(resp1.Text)
 fmt.Println(resp2.Text)
 ```
 
-多轮对话的完整教程见 [Session 教程](session-tutorial.md)。
+多轮对话的完整教程见 [Session 完整指南](session-guide.md)。
 
 ## 6. 常见问题
 
@@ -185,6 +185,6 @@ fmt.Println(resp2.Text)
 ## 相关文档
 - [文档索引](README.md)
 - [配置指南](configuration.md)
-- [使用指南](usage-guide.md)
-- [API 参考](api-reference.md)
-- [示例代码](examples.md)
+- [API 使用指南](api-guide.md)
+- [Session 完整指南](session-guide.md)
+- [示例代码](../examples/README.md)

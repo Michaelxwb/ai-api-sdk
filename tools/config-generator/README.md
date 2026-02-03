@@ -313,7 +313,7 @@ go run ./tools/config-generator/cmd/config-generator \
 # 3. 复制生成的 YAML 配置到 config.yaml
 # 4. 替换占位符（Token、Cookie 等）
 # 5. 测试连通性
-go run examples/09-connectivity-test/basic/main.go
+go run ./examples/04-connectivity-test/main.go
 ```
 
 ### 场景 2: 批量迁移多个平台
@@ -474,10 +474,10 @@ go test ./tools/config-generator/... -cover
 
 ## 相关文档
 
-- [自定义网关配置指南](custom-gateway-guide.md) - 详细配置说明
-- [配置指南](configuration.md) - 通用配置说明
-- [快速开始](quickstart.md) - SDK 使用入门
-- [示例代码](examples.md) - 完整示例
+- [自定义网关配置指南](../../docs/custom-gateway-guide.md) - 详细配置说明
+- [配置指南](../../docs/configuration.md) - 通用配置说明
+- [快速开始](../../docs/quickstart.md) - SDK 使用入门
+- [示例代码](../../examples/README.md) - 完整示例
 
 ## 技术支持
 

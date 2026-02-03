@@ -3,11 +3,12 @@ package sessionstore
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
-	"github.com/Michaelxwb/ai-api-sdk/provider/base"
 	"github.com/Michaelxwb/ai-api-sdk/session"
 )
 
@@ -20,7 +21,7 @@ type FileStore struct {
 }
 
 type fileSession struct {
-	Messages []base.Message      `json:"messages"`
+	Messages []session.Message   `json:"messages"`
 	Meta     session.SessionMeta `json:"meta"`
 	Version  int64               `json:"version"`
 }
@@ -41,8 +42,8 @@ func NewFileStore(path string) (*FileStore, error) {
 	return store, nil
 }
 
-// GetMessages retrieves message history for a session.
-func (s *FileStore) GetMessages(_ context.Context, sessionID string, opts session.GetOptions) ([]base.Message, error) {
+// Get retrieves a session snapshot.
+func (s *FileStore) Get(_ context.Context, sessionID string) (*session.SessionState, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -50,19 +51,52 @@ func (s *FileStore) GetMessages(_ context.Context, sessionID string, opts sessio
 	if !ok {
 		return nil, session.ErrSessionNotFound
 	}
-	msgs := append([]base.Message(nil), entry.Messages...)
-	if opts.MaxMessages > 0 {
-		policy := session.WindowPolicy{
-			MaxMessages:      opts.MaxMessages,
-			KeepSystemPrompt: opts.KeepSystemPrompt,
-		}
-		msgs = policy.Truncate(msgs)
+
+	state := &session.SessionState{
+		ID:       sessionID,
+		Messages: cloneMessages(entry.Messages),
 	}
-	return msgs, nil
+	applyStoredMeta(state, &entry.Meta)
+	return state, nil
 }
 
-// AppendMessages appends messages and persists to disk.
-func (s *FileStore) AppendMessages(_ context.Context, sessionID string, msgs []base.Message) error {
+// Save writes a session snapshot to disk.
+func (s *FileStore) Save(_ context.Context, state *session.SessionState) error {
+	if state == nil {
+		return errors.New("session store: nil state")
+	}
+	if state.ID == "" {
+		return errors.New("session store: missing session id")
+	}
+
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entry := s.sessions[state.ID]
+	var existingMeta *session.SessionMeta
+	if entry == nil {
+		entry = &fileSession{}
+		s.sessions[state.ID] = entry
+	} else {
+		existingMeta = &entry.Meta
+	}
+
+	meta := normalizeMetaForSave(state, existingMeta, now)
+	entry.Messages = cloneMessages(state.Messages)
+	entry.Meta = *meta
+	entry.Version++
+	return s.save()
+}
+
+// Delete removes a session.
+func (s *FileStore) Delete(ctx context.Context, sessionID string) error {
+	return s.DeleteSession(ctx, sessionID)
+}
+
+// Append appends messages and persists to disk.
+func (s *FileStore) Append(_ context.Context, sessionID string, msgs ...session.Message) error {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -118,7 +152,7 @@ func (s *FileStore) GetMeta(_ context.Context, sessionID string) (*session.Sessi
 	if !ok {
 		return nil, session.ErrSessionNotFound
 	}
-	meta := cloneMeta(entry.Meta)
+	meta := cloneSessionMeta(entry.Meta)
 	return &meta, nil
 }
 
@@ -149,7 +183,7 @@ func (s *FileStore) GetVersion(_ context.Context, sessionID string) (int64, erro
 }
 
 // AppendMessagesWithVersion appends messages with optimistic locking.
-func (s *FileStore) AppendMessagesWithVersion(_ context.Context, sessionID string, expectedVersion int64, msgs []base.Message) (int64, error) {
+func (s *FileStore) AppendMessagesWithVersion(_ context.Context, sessionID string, expectedVersion int64, msgs []session.Message) (int64, error) {
 	if len(msgs) == 0 {
 		return expectedVersion, nil
 	}
@@ -221,8 +255,6 @@ func (s *FileStore) save() error {
 }
 
 var (
-	_ session.LegacySessionStore        = (*FileStore)(nil)
-	_ session.SessionStoreWithLifecycle = (*FileStore)(nil)
-	_ session.SessionStoreWithMeta      = (*FileStore)(nil)
-	_ session.SessionStoreWithVersion   = (*FileStore)(nil)
+	_ session.SessionStore         = (*FileStore)(nil)
+	_ session.SessionStoreAppender = (*FileStore)(nil)
 )

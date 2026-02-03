@@ -6,7 +6,6 @@ import (
 	"errors"
 	"time"
 
-	"github.com/Michaelxwb/ai-api-sdk/provider/base"
 	"github.com/Michaelxwb/ai-api-sdk/session"
 	"github.com/redis/go-redis/v9"
 )
@@ -28,46 +27,108 @@ func NewRedisStore(rdb *redis.Client, ttl time.Duration) *RedisStore {
 	}
 }
 
-// GetMessages retrieves message history for a session.
-func (s *RedisStore) GetMessages(ctx context.Context, sessionID string, opts session.GetOptions) ([]base.Message, error) {
-	key := s.messagesKey(sessionID)
-
-	start, stop := int64(0), int64(-1)
-	if opts.MaxMessages > 0 && !opts.KeepSystemPrompt {
-		start = -int64(opts.MaxMessages)
-		stop = -1
+// Get retrieves a full session state.
+func (s *RedisStore) Get(ctx context.Context, sessionID string) (*session.SessionState, error) {
+	var meta *session.SessionMeta
+	metaPayload, err := s.rdb.Get(ctx, s.metaKey(sessionID)).Bytes()
+	if err != nil {
+		if !errors.Is(err, redis.Nil) {
+			return nil, err
+		}
+	} else {
+		var stored session.SessionMeta
+		if err := json.Unmarshal(metaPayload, &stored); err != nil {
+			return nil, err
+		}
+		meta = &stored
 	}
 
-	items, err := s.rdb.LRange(ctx, key, start, stop).Result()
+	items, err := s.rdb.LRange(ctx, s.messagesKey(sessionID), 0, -1).Result()
 	if err != nil {
 		return nil, err
 	}
-	if len(items) == 0 {
+	if len(items) == 0 && meta == nil {
 		return nil, session.ErrSessionNotFound
 	}
 
-	msgs := make([]base.Message, 0, len(items))
+	msgs := make([]session.Message, 0, len(items))
 	for _, item := range items {
-		var msg base.Message
+		var msg session.Message
 		if err := json.Unmarshal([]byte(item), &msg); err != nil {
 			return nil, err
 		}
 		msgs = append(msgs, msg)
 	}
 
-	if opts.MaxMessages > 0 && opts.KeepSystemPrompt {
-		policy := session.WindowPolicy{
-			MaxMessages:      opts.MaxMessages,
-			KeepSystemPrompt: opts.KeepSystemPrompt,
-		}
-		msgs = policy.Truncate(msgs)
+	state := &session.SessionState{
+		ID:       sessionID,
+		Messages: msgs,
 	}
-
-	return msgs, nil
+	applyStoredMeta(state, meta)
+	return state, nil
 }
 
-// AppendMessages appends messages to a session.
-func (s *RedisStore) AppendMessages(ctx context.Context, sessionID string, msgs []base.Message) error {
+// Save writes the provided session state.
+func (s *RedisStore) Save(ctx context.Context, state *session.SessionState) error {
+	if state == nil {
+		return errors.New("session store: nil state")
+	}
+	if state.ID == "" {
+		return errors.New("session store: missing session id")
+	}
+
+	now := time.Now()
+	if state.CreatedAt.IsZero() {
+		existing, err := s.lookupCreatedAt(ctx, state.ID)
+		if err != nil {
+			return err
+		}
+		if existing.IsZero() {
+			state.CreatedAt = now
+		} else {
+			state.CreatedAt = existing
+		}
+	}
+	state.UpdatedAt = now
+
+	meta := metaFromState(state)
+	payload, err := json.Marshal(meta)
+	if err != nil {
+		return err
+	}
+
+	values := make([]interface{}, 0, len(state.Messages))
+	for _, msg := range state.Messages {
+		data, err := json.Marshal(msg)
+		if err != nil {
+			return err
+		}
+		values = append(values, data)
+	}
+
+	pipe := s.rdb.Pipeline()
+	pipe.Set(ctx, s.metaKey(state.ID), payload, s.TTL)
+	pipe.Del(ctx, s.messagesKey(state.ID))
+	if len(values) > 0 {
+		pipe.RPush(ctx, s.messagesKey(state.ID), values...)
+	}
+	pipe.Incr(ctx, s.versionKey(state.ID))
+	if s.TTL > 0 {
+		pipe.Expire(ctx, s.messagesKey(state.ID), s.TTL)
+		pipe.Expire(ctx, s.versionKey(state.ID), s.TTL)
+		pipe.Expire(ctx, s.metaKey(state.ID), s.TTL)
+	}
+	_, err = pipe.Exec(ctx)
+	return err
+}
+
+// Delete removes a session and all its messages.
+func (s *RedisStore) Delete(ctx context.Context, sessionID string) error {
+	return s.DeleteSession(ctx, sessionID)
+}
+
+// Append appends messages to a session.
+func (s *RedisStore) Append(ctx context.Context, sessionID string, msgs ...session.Message) error {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -174,7 +235,7 @@ func (s *RedisStore) GetVersion(ctx context.Context, sessionID string) (int64, e
 }
 
 // AppendMessagesWithVersion appends messages with optimistic locking.
-func (s *RedisStore) AppendMessagesWithVersion(ctx context.Context, sessionID string, expectedVersion int64, msgs []base.Message) (int64, error) {
+func (s *RedisStore) AppendMessagesWithVersion(ctx context.Context, sessionID string, expectedVersion int64, msgs []session.Message) (int64, error) {
 	if len(msgs) == 0 {
 		return expectedVersion, nil
 	}
@@ -228,6 +289,22 @@ func (s *RedisStore) AppendMessagesWithVersion(ctx context.Context, sessionID st
 	return newVersion, nil
 }
 
+func (s *RedisStore) lookupCreatedAt(ctx context.Context, sessionID string) (time.Time, error) {
+	data, err := s.rdb.Get(ctx, s.metaKey(sessionID)).Bytes()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return time.Time{}, nil
+		}
+		return time.Time{}, err
+	}
+
+	var meta session.SessionMeta
+	if err := json.Unmarshal(data, &meta); err != nil {
+		return time.Time{}, err
+	}
+	return meta.CreatedAt, nil
+}
+
 func (s *RedisStore) messagesKey(sessionID string) string {
 	return s.Prefix + sessionID + ":messages"
 }
@@ -241,8 +318,6 @@ func (s *RedisStore) versionKey(sessionID string) string {
 }
 
 var (
-	_ session.LegacySessionStore        = (*RedisStore)(nil)
-	_ session.SessionStoreWithLifecycle = (*RedisStore)(nil)
-	_ session.SessionStoreWithMeta      = (*RedisStore)(nil)
-	_ session.SessionStoreWithVersion   = (*RedisStore)(nil)
+	_ session.SessionStore         = (*RedisStore)(nil)
+	_ session.SessionStoreAppender = (*RedisStore)(nil)
 )
