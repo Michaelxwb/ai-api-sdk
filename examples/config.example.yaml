@@ -1,97 +1,80 @@
 # ==============================================================================
-# AI 安全评估平台 - 统一认证配置
+# Example configuration for ai-api-sdk
 # ==============================================================================
 
-# --- 凭证存储配置 ---
-# 控制 credential 的持久化方式（文件 / 加密文件）
+# Credential store configuration (file-based JSON).
 auth:
   store:
-    type: file                                    # 存储类型：file（本地文件）
-    path: "./examples/credentials.json"           # 凭证文件路径（相对或绝对路径）
-    encrypted: false                              # 是否启用加密（生产环境建议 true）
+    type: file
+    path: "../credentials.json"
+    encrypted: false
     encryption:
-      enabled: false                              # 加密开关（与 encrypted 二选一即可）
-      algo: "AES-256-GCM"                         # 对称加密算法
-      kdf: "scrypt"                               # 密钥派生函数
-      kdf_params:                                 # scrypt 参数（N=CPU/内存成本, R=块大小, P=并行度）
+      enabled: false
+      algo: "AES-256-GCM"
+      kdf: "scrypt"
+      kdf_params:
         n: 32768
         r: 8
         p: 1
-        key_len: 32                               # 派生密钥长度（字节）
-      master_key_env: "AI_SEC_EVAL_MASTER_KEY"    # 主密钥来源：环境变量名
-      # master_key_file: "/path/to/master.key"    # 主密钥来源：文件路径（二选一）
+        key_len: 32
+      master_key_env: "AI_SDK_MASTER_KEY"
+      # master_key_file: "/path/to/master.key"
 
-# --- Provider 配置 ---
-# 每个 provider 定义一个 AI 平台接入点
-# - name:     唯一标识，用于 client.Chat(ctx, "name", req) 调用
-# - type:     对应 provider/ 下的注册名（openai / claude / gemini / ollama / openai_compat）
-# - base_url: API 基础地址（含 /v1 等路径前缀）
-# - auth_ref: 关联的凭证 ID（对应 credentials 中的 id）
-# - headers:  附加请求头（可选）
+# Providers (one entry per endpoint).
 providers:
-  # ---- 本地推理 ----
-  - name: "llama_local"                           # llama.cpp server（OpenAI 兼容）
-    type: "openai_compat"
-    base_url: "http://127.0.0.1:8080/v1"         # llama-server 默认端口
-    auth_ref: "none"                              # 本地无需认证
-
-  - name: "vllm_local"                            # vLLM（OpenAI 兼容）
+  # Local vLLM (OpenAI-compatible)
+  - name: "vllm_local"
     type: "openai_compat"
     base_url: "https://integrate.api.nvidia.com/v1"
-    auth_ref: "vllm_bearer"                       # 可选 bearer token
+    auth_ref: "vllm_bearer"
 
-  # ---- 云端 API ----
-  - name: "openai_cloud"                          # OpenAI GPT 系列
-    type: "openai"                                # 自动使用 https://api.openai.com/v1
+  # OpenAI cloud
+  - name: "openai_cloud"
+    type: "openai"
     auth_ref: "openai_key"
 
-  - name: "claude_cloud"                          # Anthropic Claude
-    type: "claude"                                # 自动使用 https://api.anthropic.com
+  # OpenAI cloud (alias for simple examples)
+  - name: "openai"
+    type: "openai"
+    auth_ref: "openai_key"
+
+  # Anthropic Claude
+  - name: "claude_cloud"
+    type: "claude"
     auth_ref: "claude_key"
 
-  - name: "gemini_cloud"                          # Google Gemini
-    type: "gemini"                                # 自动使用 https://generativelanguage.googleapis.com
+  # Google Gemini
+  - name: "gemini_cloud"
+    type: "gemini"
     auth_ref: "gemini_key"
 
-  # ---- 自定义 OpenAI 兼容网关（客户私有部署） ----
-  - name: "customer_gateway"                      # 客户自建 AI 网关（New API / One API 等）
+  # Optional OpenAI-compatible gateway
+  - name: "gateway"
     type: "openai_compat"
-    base_url: "https://elysiver.h-e.top/pg"       # 网关地址（不含 endpoint path）
-    path: "/chat/completions"                     # 自定义路径（替代默认 /chat/completions）
-    auth_ref: "customer_cookie"
-    headers:                                      # 网关要求的自定义请求头
-      New-Api-User: "10121"
-    extra_body:                                   # 注入到请求体的额外字段
+    base_url: "https://your-gateway.example.com/v1"
+    path: "/chat/completions"
+    auth_ref: "gateway_token"
+    headers:
+      X-Project: "demo"
+    extra_body:
       group: "default"
 
-  # ---- 更多 OpenAI 兼容平台（取消注释启用） ----
-  - name: "deepseek"
-    type: "deepseek"                            # 内置注册，默认 https://api.deepseek.com/v1
+  # Optional DeepSeek
+  - name: "deepseek_cloud"
+    type: "deepseek"
     auth_ref: "deepseek_key"
 
-  # - name: "moonshot"
-  #   type: "moonshot"                            # 内置注册，默认 https://api.moonshot.cn/v1
-  #   auth_ref: "moonshot_key"
-  #
-  # - name: "ollama_local"
-  #   type: "ollama"                              # Ollama 原生 /api/chat 格式
-  #   base_url: "http://127.0.0.1:11434"
-  #   auth_ref: "none"
+  # Optional Dify
+  - name: "dify"
+    type: "dify"
+    base_url: "https://api.dify.ai/v1"  # 或自建 Dify 地址
+    auth_ref: "dify_key"
+    # extra_body:  # 可选：注入变量
+    #   inputs:
+    #     var1: "value1"
+    #   user: "custom-user-id"
 
-# --- 凭证定义 ---
-# 每个凭证对应一组认证信息
-# - id:           唯一标识，被 provider.auth_ref 引用
-# - provider:     归属的 provider 类型（用于 Manager.Resolve 按 provider 自动选凭证）
-# - auth_type:    认证类型
-#     none          - 无认证（本地端点）
-#     bearer_token  - Authorization: Bearer <token>（OpenAI / vLLM / DeepSeek / Moonshot）
-#     api_key       - 自定义 Header（Claude 用 x-api-key，Gemini 用 x-goog-api-key）
-#     oauth         - OAuth2 access_token + refresh_token（支持 401 自动刷新）
-#     jwt_sign      - HMAC-SHA256 签名 JWT（智谱 GLM）
-# - api_key:       API Key 值（auth_type=api_key 时使用）
-# - access_token:  Bearer Token 值（auth_type=bearer_token/oauth 时使用）
-# - priority:      优先级（数值越大越优先，用于 PrioritySelector）
-# - disabled:      是否禁用该凭证
+# Credentials (referenced by providers[].auth_ref).
 credentials:
   - id: "none"
     auth_type: "none"
@@ -99,36 +82,34 @@ credentials:
   - id: "vllm_bearer"
     provider: "openai_compat"
     auth_type: "bearer_token"
-    access_token: "nvapi-usfsdsfs"              # 替换为实际 token
+    access_token: "SK-TOKEN-JJ"
 
   - id: "openai_key"
     provider: "openai"
     auth_type: "bearer_token"
-    access_token: "sk-REPLACE"                    # 替换为 OpenAI API Key
+    access_token: "sk-REPLACE"
 
   - id: "claude_key"
     provider: "claude"
     auth_type: "api_key"
-    api_key: "sk-ant-REPLACE"                     # 替换为 Anthropic API Key
+    api_key: "sk-ant-REPLACE"
 
   - id: "gemini_key"
     provider: "gemini"
     auth_type: "api_key"
-    api_key: "AIza-REPLACE"                       # 替换为 Google AI API Key
+    api_key: "AIza-REPLACE"
 
-  - id: "customer_cookie"                        # 自定义网关：Cookie 认证
-    auth_type: "none"                             # 认证通过 headers 中的 Cookie 完成
-    headers:
-      Cookie: "session=xxxxx"     # 替换为实际 session cookie
+  - id: "gateway_token"
+    provider: "openai_compat"
+    auth_type: "bearer_token"
+    access_token: "REPLACE_ME"
 
   - id: "deepseek_key"
     provider: "deepseek"
     auth_type: "bearer_token"
-    access_token: "sk-bsdfsdf"
-  # - id: "zhipu_key"                             # 智谱 GLM（JWT 签名认证）
-  #   provider: "zhipu"
-  #   auth_type: "jwt_sign"
-  #   metadata:
-  #     jwt_issuer: "YOUR_API_KEY_ID"
-  #     jwt_secret: "YOUR_API_KEY_SECRET"
-  #     jwt_exp_seconds: 300
+    access_token: "sk-REPLACE"
+
+  - id: "dify_key"
+    provider: "dify"
+    auth_type: "api_key"
+    api_key: "app-lwrLMC2HKTjz1jDLq2T02i4l"

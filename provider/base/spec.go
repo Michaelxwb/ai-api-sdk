@@ -1,4 +1,4 @@
-package provider
+package base
 
 import (
 	"context"
@@ -6,27 +6,6 @@ import (
 
 	"github.com/Michaelxwb/ai-api-sdk/auth"
 )
-
-// Message is a simplified chat message.
-type Message struct {
-	Role    string `json:"role"`
-	Content string `json:"content"`
-}
-
-// ChatRequest is a unified request structure.
-type ChatRequest struct {
-	Model       string    `json:"model"`
-	Messages    []Message `json:"messages"`
-	Temperature *float32  `json:"temperature,omitempty"`
-	MaxTokens   *int      `json:"max_tokens,omitempty"`
-	Stream      bool      `json:"stream,omitempty"`
-}
-
-// ChatResponse is a unified response structure.
-type ChatResponse struct {
-	Text string
-	Raw  []byte
-}
 
 // BuildOptions carries per-call overrides from ProviderConfig.
 type BuildOptions struct {

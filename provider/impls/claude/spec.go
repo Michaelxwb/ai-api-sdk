@@ -1,4 +1,4 @@
-package provider
+package claude
 
 import (
 	"bytes"
@@ -10,13 +10,14 @@ import (
 	"strings"
 
 	"github.com/Michaelxwb/ai-api-sdk/auth"
+	"github.com/Michaelxwb/ai-api-sdk/provider/base"
 )
 
 // ClaudeSpec implements Anthropic Claude messages API.
 type ClaudeSpec struct{}
 
 func init() {
-	Register("claude", &ClaudeSpec{})
+	base.Register("claude", &ClaudeSpec{})
 }
 
 func (s *ClaudeSpec) Name() string { return "claude" }
@@ -27,7 +28,7 @@ func (s *ClaudeSpec) SupportedAuthTypes() []auth.AuthType {
 	return []auth.AuthType{auth.AuthTypeAPIKey, auth.AuthTypeOAuth, auth.AuthTypeBearerToken}
 }
 
-func (s *ClaudeSpec) BuildRequest(ctx context.Context, opts BuildOptions, req ChatRequest) (*http.Request, error) {
+func (s *ClaudeSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req base.ChatRequest) (*http.Request, error) {
 	baseURL := opts.BaseURL
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = s.DefaultBaseURL()
@@ -40,6 +41,7 @@ func (s *ClaudeSpec) BuildRequest(ctx context.Context, opts BuildOptions, req Ch
 		"model":      req.Model,
 		"messages":   req.Messages,
 		"max_tokens": maxTokens,
+		"stream":     req.Stream,
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
@@ -55,13 +57,13 @@ func (s *ClaudeSpec) BuildRequest(ctx context.Context, opts BuildOptions, req Ch
 	return httpReq, nil
 }
 
-func (s *ClaudeSpec) ParseResponse(resp *http.Response) (ChatResponse, error) {
+func (s *ClaudeSpec) ParseResponse(resp *http.Response) (base.ChatResponse, error) {
 	if resp == nil {
-		return ChatResponse{}, fmt.Errorf("claude: response is nil")
+		return base.ChatResponse{}, fmt.Errorf("claude: response is nil")
 	}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return ChatResponse{}, err
+		return base.ChatResponse{}, err
 	}
 	var parsed struct {
 		Content []struct {
@@ -73,7 +75,7 @@ func (s *ClaudeSpec) ParseResponse(resp *http.Response) (ChatResponse, error) {
 	if len(parsed.Content) > 0 {
 		text = parsed.Content[0].Text
 	}
-	return ChatResponse{Text: text, Raw: data}, nil
+	return base.ChatResponse{Text: text, Raw: data}, nil
 }
 
 func (s *ClaudeSpec) AuthStrategyOverride(cred *auth.Credential) (auth.AuthStrategy, bool) {

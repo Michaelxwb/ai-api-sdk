@@ -19,18 +19,18 @@ const (
 
 // Credential represents a unified authentication credential.
 type Credential struct {
-	ID          string         `json:"id" yaml:"id"`
-	Provider    string         `json:"provider,omitempty" yaml:"provider,omitempty"`
-	AuthType    AuthType       `json:"auth_type" yaml:"auth_type"`
-	APIKey      string         `json:"api_key,omitempty" yaml:"api_key,omitempty"`
-	AccessToken string         `json:"access_token,omitempty" yaml:"access_token,omitempty"`
-	RefreshToken string        `json:"refresh_token,omitempty" yaml:"refresh_token,omitempty"`
-	ExpiresAt   *time.Time     `json:"expires_at,omitempty" yaml:"expires_at,omitempty"`
-	Headers     map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
-	QueryParams map[string]string `json:"query_params,omitempty" yaml:"query_params,omitempty"`
-	Priority    int            `json:"priority,omitempty" yaml:"priority,omitempty"`
-	Disabled    bool           `json:"disabled,omitempty" yaml:"disabled,omitempty"`
-	Metadata    map[string]any `json:"metadata,omitempty" yaml:"metadata,omitempty"`
+	ID           string            `json:"id" yaml:"id"`
+	Provider     string            `json:"provider,omitempty" yaml:"provider,omitempty"`
+	AuthType     AuthType          `json:"auth_type" yaml:"auth_type"`
+	APIKey       string            `json:"api_key,omitempty" yaml:"api_key,omitempty"`
+	AccessToken  string            `json:"access_token,omitempty" yaml:"access_token,omitempty"`
+	RefreshToken string            `json:"refresh_token,omitempty" yaml:"refresh_token,omitempty"`
+	ExpiresAt    *time.Time        `json:"expires_at,omitempty" yaml:"expires_at,omitempty"`
+	Headers      map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
+	QueryParams  map[string]string `json:"query_params,omitempty" yaml:"query_params,omitempty"`
+	Priority     int               `json:"priority,omitempty" yaml:"priority,omitempty"`
+	Disabled     bool              `json:"disabled,omitempty" yaml:"disabled,omitempty"`
+	Metadata     map[string]any    `json:"metadata,omitempty" yaml:"metadata,omitempty"`
 }
 
 func (c *Credential) IsExpired(now time.Time) bool {

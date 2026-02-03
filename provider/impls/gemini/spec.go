@@ -1,4 +1,4 @@
-package provider
+package gemini
 
 import (
 	"bytes"
@@ -10,13 +10,14 @@ import (
 	"strings"
 
 	"github.com/Michaelxwb/ai-api-sdk/auth"
+	"github.com/Michaelxwb/ai-api-sdk/provider/base"
 )
 
 // GeminiSpec implements Gemini generateContent API.
 type GeminiSpec struct{}
 
 func init() {
-	Register("gemini", &GeminiSpec{})
+	base.Register("gemini", &GeminiSpec{})
 }
 
 func (s *GeminiSpec) Name() string { return "gemini" }
@@ -27,7 +28,7 @@ func (s *GeminiSpec) SupportedAuthTypes() []auth.AuthType {
 	return []auth.AuthType{auth.AuthTypeAPIKey, auth.AuthTypeOAuth, auth.AuthTypeBearerToken}
 }
 
-func (s *GeminiSpec) BuildRequest(ctx context.Context, opts BuildOptions, req ChatRequest) (*http.Request, error) {
+func (s *GeminiSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req base.ChatRequest) (*http.Request, error) {
 	baseURL := opts.BaseURL
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = s.DefaultBaseURL()
@@ -50,7 +51,14 @@ func (s *GeminiSpec) BuildRequest(ctx context.Context, opts BuildOptions, req Ch
 	if err != nil {
 		return nil, err
 	}
-	url := fmt.Sprintf("%s/v1beta/models/%s:generateContent", strings.TrimRight(baseURL, "/"), req.Model)
+	// Use streamGenerateContent endpoint for streaming mode
+	action := "generateContent"
+	queryParams := ""
+	if req.Stream {
+		action = "streamGenerateContent"
+		queryParams = "?alt=sse"
+	}
+	url := fmt.Sprintf("%s/v1beta/models/%s:%s%s", strings.TrimRight(baseURL, "/"), req.Model, action, queryParams)
 	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return nil, err
@@ -59,13 +67,13 @@ func (s *GeminiSpec) BuildRequest(ctx context.Context, opts BuildOptions, req Ch
 	return httpReq, nil
 }
 
-func (s *GeminiSpec) ParseResponse(resp *http.Response) (ChatResponse, error) {
+func (s *GeminiSpec) ParseResponse(resp *http.Response) (base.ChatResponse, error) {
 	if resp == nil {
-		return ChatResponse{}, fmt.Errorf("gemini: response is nil")
+		return base.ChatResponse{}, fmt.Errorf("gemini: response is nil")
 	}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return ChatResponse{}, err
+		return base.ChatResponse{}, err
 	}
 	var parsed struct {
 		Candidates []struct {
@@ -81,7 +89,7 @@ func (s *GeminiSpec) ParseResponse(resp *http.Response) (ChatResponse, error) {
 	if len(parsed.Candidates) > 0 && len(parsed.Candidates[0].Content.Parts) > 0 {
 		text = parsed.Candidates[0].Content.Parts[0].Text
 	}
-	return ChatResponse{Text: text, Raw: data}, nil
+	return base.ChatResponse{Text: text, Raw: data}, nil
 }
 
 func (s *GeminiSpec) AuthStrategyOverride(cred *auth.Credential) (auth.AuthStrategy, bool) {

@@ -7,7 +7,7 @@ import (
 
 	"github.com/Michaelxwb/ai-api-sdk/auth"
 	"github.com/Michaelxwb/ai-api-sdk/config"
-	"github.com/Michaelxwb/ai-api-sdk/provider"
+	"github.com/Michaelxwb/ai-api-sdk/provider/base"
 )
 
 const defaultTestTimeout = 10 * time.Second
@@ -22,12 +22,13 @@ type TestOptions struct {
 
 // TestResult 连通性测试结果
 type TestResult struct {
-	Latency  time.Duration         // 请求延迟
-	Response provider.ChatResponse // 原始响应
+	Latency  time.Duration     // 请求延迟
+	Response base.ChatResponse // 原始响应
 }
 
 // TestWith 平台集成模式的连通性测试
 // 通过发送最小化 chat 请求验证全链路：网络可达 → 凭证有效 → 模型可用
+// 内部使用 NewSessionWith + Session.Chat() 实现
 func (c *Client) TestWith(ctx context.Context, cred *auth.Credential, pc *config.ProviderConfig, opt *TestOptions) (TestResult, error) {
 	optVal, err := normalizeTestOptions(opt)
 	if err != nil {
@@ -40,16 +41,23 @@ func (c *Client) TestWith(ctx context.Context, cred *auth.Credential, pc *config
 
 	temp := float32(0)
 	maxTokens := optVal.MaxTokens
-	req := provider.ChatRequest{
+	req := base.ChatRequest{
 		Model:       optVal.Model,
-		Messages:    []provider.Message{{Role: "user", Content: optVal.Prompt}},
+		Messages:    []base.Message{{Role: "user", Content: optVal.Prompt}},
 		Temperature: &temp,
 		MaxTokens:   &maxTokens,
 		Stream:      false,
 	}
 
 	start := time.Now()
-	resp, err := c.ChatWith(ctx, cred, pc, req)
+
+	sess := c.NewSessionWith(
+		cred,
+		pc,
+		WithStore(nil),
+		WithHistoryMode(HistoryNone),
+	)
+	resp, err := sess.Chat(ctx, req)
 	return TestResult{Latency: time.Since(start), Response: resp}, err
 }
 
@@ -66,16 +74,16 @@ func (c *Client) Test(ctx context.Context, providerName string, opt *TestOptions
 
 	temp := float32(0)
 	maxTokens := optVal.MaxTokens
-	req := provider.ChatRequest{
+	req := base.ChatRequest{
 		Model:       optVal.Model,
-		Messages:    []provider.Message{{Role: "user", Content: optVal.Prompt}},
+		Messages:    []base.Message{{Role: "user", Content: optVal.Prompt}},
 		Temperature: &temp,
 		MaxTokens:   &maxTokens,
 		Stream:      false,
 	}
 
 	start := time.Now()
-	resp, err := c.Chat(ctx, providerName, req)
+	resp, err := c.NewSession(providerName, WithStore(nil), WithHistoryMode(HistoryNone)).Chat(ctx, req)
 	return TestResult{Latency: time.Since(start), Response: resp}, err
 }
 

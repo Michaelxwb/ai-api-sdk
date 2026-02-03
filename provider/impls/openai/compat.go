@@ -1,4 +1,4 @@
-package provider
+package openai
 
 import (
 	"bytes"
@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/Michaelxwb/ai-api-sdk/auth"
+	"github.com/Michaelxwb/ai-api-sdk/provider/base"
 )
 
 // OpenAICompatSpec implements OpenAI-compatible chat API.
@@ -20,7 +21,7 @@ type OpenAICompatSpec struct {
 }
 
 func init() {
-	Register("openai_compat", NewOpenAICompatSpec("openai_compat", ""))
+	base.Register("openai_compat", NewOpenAICompatSpec("openai_compat", ""))
 }
 
 func NewOpenAICompatSpec(name, baseURL string) *OpenAICompatSpec {
@@ -36,7 +37,7 @@ func (s *OpenAICompatSpec) SupportedAuthTypes() []auth.AuthType {
 	return []auth.AuthType{auth.AuthTypeBearerToken, auth.AuthTypeAPIKey, auth.AuthTypeNone, auth.AuthTypeOAuth}
 }
 
-func (s *OpenAICompatSpec) BuildRequest(ctx context.Context, opts BuildOptions, req ChatRequest) (*http.Request, error) {
+func (s *OpenAICompatSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req base.ChatRequest) (*http.Request, error) {
 	baseURL := opts.BaseURL
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = s.defaultBaseURL
@@ -73,13 +74,13 @@ func (s *OpenAICompatSpec) BuildRequest(ctx context.Context, opts BuildOptions, 
 	return httpReq, nil
 }
 
-func (s *OpenAICompatSpec) ParseResponse(resp *http.Response) (ChatResponse, error) {
+func (s *OpenAICompatSpec) ParseResponse(resp *http.Response) (base.ChatResponse, error) {
 	if resp == nil {
-		return ChatResponse{}, fmt.Errorf("openai_compat: response is nil")
+		return base.ChatResponse{}, fmt.Errorf("openai_compat: response is nil")
 	}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return ChatResponse{}, err
+		return base.ChatResponse{}, err
 	}
 	var parsed struct {
 		Choices []struct {
@@ -93,7 +94,7 @@ func (s *OpenAICompatSpec) ParseResponse(resp *http.Response) (ChatResponse, err
 	if len(parsed.Choices) > 0 {
 		text = parsed.Choices[0].Message.Content
 	}
-	return ChatResponse{Text: text, Raw: data}, nil
+	return base.ChatResponse{Text: text, Raw: data}, nil
 }
 
 func (s *OpenAICompatSpec) AuthStrategyOverride(cred *auth.Credential) (auth.AuthStrategy, bool) {

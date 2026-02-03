@@ -26,26 +26,26 @@ type CredentialStore interface {
 
 // FileStore persists credentials in a JSON file with optional AES-256-GCM encryption.
 type FileStore struct {
-	Path           string
-	Encrypted      bool
-	MasterKeyEnv   string
-	MasterKeyFile  string
-	ScryptParams   ScryptParams
+	Path          string
+	Encrypted     bool
+	MasterKeyEnv  string
+	MasterKeyFile string
+	ScryptParams  ScryptParams
 }
 
 // ScryptParams defines scrypt KDF parameters.
 type ScryptParams struct {
-	N int `json:"n"`
-	R int `json:"r"`
-	P int `json:"p"`
+	N      int `json:"n"`
+	R      int `json:"r"`
+	P      int `json:"p"`
 	KeyLen int `json:"key_len"`
 }
 
 // NewFileStore returns a FileStore with sensible defaults.
 func NewFileStore(path string) *FileStore {
 	return &FileStore{
-		Path: path,
-		Encrypted: true,
+		Path:         path,
+		Encrypted:    true,
 		ScryptParams: ScryptParams{N: 32768, R: 8, P: 1, KeyLen: 32},
 	}
 }
@@ -132,12 +132,12 @@ func (s *FileStore) Save(creds []*Credential) error {
 }
 
 type fileEnvelope struct {
-	Version    int         `json:"version"`
-	KDF        string      `json:"kdf"`
+	Version    int          `json:"version"`
+	KDF        string       `json:"kdf"`
 	KDFParams  ScryptParams `json:"kdf_params"`
-	Salt       string      `json:"salt"`
-	Nonce      string      `json:"nonce"`
-	Ciphertext string      `json:"ciphertext"`
+	Salt       string       `json:"salt"`
+	Nonce      string       `json:"nonce"`
+	Ciphertext string       `json:"ciphertext"`
 }
 
 func (s *FileStore) encryptEnvelope(creds []*Credential) (*fileEnvelope, error) {
@@ -171,11 +171,11 @@ func (s *FileStore) encryptEnvelope(creds []*Credential) (*fileEnvelope, error) 
 	}
 	ciphertext := gcm.Seal(nil, nonce, plain, nil)
 	return &fileEnvelope{
-		Version: 1,
-		KDF: "scrypt",
-		KDFParams: s.ScryptParams,
-		Salt: base64.RawStdEncoding.EncodeToString(salt),
-		Nonce: base64.RawStdEncoding.EncodeToString(nonce),
+		Version:    1,
+		KDF:        "scrypt",
+		KDFParams:  s.ScryptParams,
+		Salt:       base64.RawStdEncoding.EncodeToString(salt),
+		Nonce:      base64.RawStdEncoding.EncodeToString(nonce),
 		Ciphertext: base64.RawStdEncoding.EncodeToString(ciphertext),
 	}, nil
 }

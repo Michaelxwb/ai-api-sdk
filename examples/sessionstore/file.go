@@ -1,0 +1,260 @@
+package sessionstore
+
+import (
+	"context"
+	"encoding/json"
+	"errors"
+	"os"
+	"path/filepath"
+	"sync"
+	"time"
+
+	"github.com/Michaelxwb/ai-api-sdk/session"
+)
+
+// FileStore implements a simple JSON file-based session store.
+// It is intended for local persistence and small datasets.
+type FileStore struct {
+	mu       sync.Mutex
+	path     string
+	sessions map[string]*fileSession
+}
+
+type fileSession struct {
+	Messages []session.Message   `json:"messages"`
+	Meta     session.SessionMeta `json:"meta"`
+	Version  int64               `json:"version"`
+}
+
+type fileData struct {
+	Sessions map[string]*fileSession `json:"sessions"`
+}
+
+// NewFileStore loads or creates a JSON-backed store at the given path.
+func NewFileStore(path string) (*FileStore, error) {
+	store := &FileStore{
+		path:     path,
+		sessions: make(map[string]*fileSession),
+	}
+	if err := store.load(); err != nil {
+		return nil, err
+	}
+	return store, nil
+}
+
+// Get retrieves a session snapshot.
+func (s *FileStore) Get(_ context.Context, sessionID string) (*session.SessionState, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entry, ok := s.sessions[sessionID]
+	if !ok {
+		return nil, session.ErrSessionNotFound
+	}
+
+	state := &session.SessionState{
+		ID:       sessionID,
+		Messages: cloneMessages(entry.Messages),
+	}
+	applyStoredMeta(state, &entry.Meta)
+	return state, nil
+}
+
+// Save writes a session snapshot to disk.
+func (s *FileStore) Save(_ context.Context, state *session.SessionState) error {
+	if state == nil {
+		return errors.New("session store: nil state")
+	}
+	if state.ID == "" {
+		return errors.New("session store: missing session id")
+	}
+
+	now := time.Now()
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entry := s.sessions[state.ID]
+	var existingMeta *session.SessionMeta
+	if entry == nil {
+		entry = &fileSession{}
+		s.sessions[state.ID] = entry
+	} else {
+		existingMeta = &entry.Meta
+	}
+
+	meta := normalizeMetaForSave(state, existingMeta, now)
+	entry.Messages = cloneMessages(state.Messages)
+	entry.Meta = *meta
+	entry.Version++
+	return s.save()
+}
+
+// Delete removes a session.
+func (s *FileStore) Delete(ctx context.Context, sessionID string) error {
+	return s.DeleteSession(ctx, sessionID)
+}
+
+// Append appends messages and persists to disk.
+func (s *FileStore) Append(_ context.Context, sessionID string, msgs ...session.Message) error {
+	if len(msgs) == 0 {
+		return nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entry := s.sessions[sessionID]
+	if entry == nil {
+		entry = &fileSession{}
+		s.sessions[sessionID] = entry
+	}
+
+	entry.Messages = append(entry.Messages, msgs...)
+	entry.Version++
+	updateMeta(&entry.Meta, sessionID)
+	return s.save()
+}
+
+// CreateSession creates a new session with metadata.
+func (s *FileStore) CreateSession(_ context.Context, sessionID string, meta *session.SessionMeta) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.sessions[sessionID]; exists {
+		return session.ErrSessionConflict
+	}
+
+	entry := &fileSession{}
+	applyMeta(&entry.Meta, sessionID, meta)
+	s.sessions[sessionID] = entry
+	return s.save()
+}
+
+// DeleteSession deletes a session and persists.
+func (s *FileStore) DeleteSession(_ context.Context, sessionID string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	if _, exists := s.sessions[sessionID]; !exists {
+		return session.ErrSessionNotFound
+	}
+	delete(s.sessions, sessionID)
+	return s.save()
+}
+
+// GetMeta returns session metadata.
+func (s *FileStore) GetMeta(_ context.Context, sessionID string) (*session.SessionMeta, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entry, ok := s.sessions[sessionID]
+	if !ok {
+		return nil, session.ErrSessionNotFound
+	}
+	meta := cloneSessionMeta(entry.Meta)
+	return &meta, nil
+}
+
+// UpsertMeta updates or inserts metadata.
+func (s *FileStore) UpsertMeta(_ context.Context, sessionID string, meta *session.SessionMeta) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entry := s.sessions[sessionID]
+	if entry == nil {
+		entry = &fileSession{}
+		s.sessions[sessionID] = entry
+	}
+	applyMeta(&entry.Meta, sessionID, meta)
+	return s.save()
+}
+
+// GetVersion returns the current session version.
+func (s *FileStore) GetVersion(_ context.Context, sessionID string) (int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entry, ok := s.sessions[sessionID]
+	if !ok {
+		return 0, session.ErrSessionNotFound
+	}
+	return entry.Version, nil
+}
+
+// AppendMessagesWithVersion appends messages with optimistic locking.
+func (s *FileStore) AppendMessagesWithVersion(_ context.Context, sessionID string, expectedVersion int64, msgs []session.Message) (int64, error) {
+	if len(msgs) == 0 {
+		return expectedVersion, nil
+	}
+
+	s.mu.Lock()
+	defer s.mu.Unlock()
+
+	entry := s.sessions[sessionID]
+	if entry == nil {
+		if expectedVersion != 0 {
+			return 0, session.ErrSessionConflict
+		}
+		entry = &fileSession{}
+		s.sessions[sessionID] = entry
+	}
+	if entry.Version != expectedVersion {
+		return entry.Version, session.ErrSessionConflict
+	}
+
+	entry.Messages = append(entry.Messages, msgs...)
+	entry.Version++
+	updateMeta(&entry.Meta, sessionID)
+	if err := s.save(); err != nil {
+		return entry.Version, err
+	}
+	return entry.Version, nil
+}
+
+func (s *FileStore) load() error {
+	data, err := os.ReadFile(s.path)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	if len(data) == 0 {
+		return nil
+	}
+
+	var parsed fileData
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return err
+	}
+	if parsed.Sessions == nil {
+		parsed.Sessions = make(map[string]*fileSession)
+	}
+	s.sessions = parsed.Sessions
+	return nil
+}
+
+func (s *FileStore) save() error {
+	dir := filepath.Dir(s.path)
+	if dir != "." {
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			return err
+		}
+	}
+	payload, err := json.MarshalIndent(fileData{Sessions: s.sessions}, "", "  ")
+	if err != nil {
+		return err
+	}
+
+	tmp := s.path + ".tmp"
+	if err := os.WriteFile(tmp, payload, 0o644); err != nil {
+		return err
+	}
+	return os.Rename(tmp, s.path)
+}
+
+var (
+	_ session.SessionStore         = (*FileStore)(nil)
+	_ session.SessionStoreAppender = (*FileStore)(nil)
+)

@@ -1,4 +1,4 @@
-package provider
+package ollama
 
 import (
 	"bytes"
@@ -10,13 +10,14 @@ import (
 	"strings"
 
 	"github.com/Michaelxwb/ai-api-sdk/auth"
+	"github.com/Michaelxwb/ai-api-sdk/provider/base"
 )
 
 // OllamaSpec implements Ollama /api/chat.
 type OllamaSpec struct{}
 
 func init() {
-	Register("ollama", &OllamaSpec{})
+	base.Register("ollama", &OllamaSpec{})
 }
 
 func (s *OllamaSpec) Name() string { return "ollama" }
@@ -27,7 +28,7 @@ func (s *OllamaSpec) SupportedAuthTypes() []auth.AuthType {
 	return []auth.AuthType{auth.AuthTypeNone, auth.AuthTypeBearerToken}
 }
 
-func (s *OllamaSpec) BuildRequest(ctx context.Context, opts BuildOptions, req ChatRequest) (*http.Request, error) {
+func (s *OllamaSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req base.ChatRequest) (*http.Request, error) {
 	baseURL := opts.BaseURL
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = s.DefaultBaseURL()
@@ -50,13 +51,13 @@ func (s *OllamaSpec) BuildRequest(ctx context.Context, opts BuildOptions, req Ch
 	return httpReq, nil
 }
 
-func (s *OllamaSpec) ParseResponse(resp *http.Response) (ChatResponse, error) {
+func (s *OllamaSpec) ParseResponse(resp *http.Response) (base.ChatResponse, error) {
 	if resp == nil {
-		return ChatResponse{}, fmt.Errorf("ollama: response is nil")
+		return base.ChatResponse{}, fmt.Errorf("ollama: response is nil")
 	}
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return ChatResponse{}, err
+		return base.ChatResponse{}, err
 	}
 	var parsed struct {
 		Message struct {
@@ -64,7 +65,7 @@ func (s *OllamaSpec) ParseResponse(resp *http.Response) (ChatResponse, error) {
 		} `json:"message"`
 	}
 	_ = json.Unmarshal(data, &parsed)
-	return ChatResponse{Text: parsed.Message.Content, Raw: data}, nil
+	return base.ChatResponse{Text: parsed.Message.Content, Raw: data}, nil
 }
 
 func (s *OllamaSpec) AuthStrategyOverride(_ *auth.Credential) (auth.AuthStrategy, bool) {
