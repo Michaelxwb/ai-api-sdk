@@ -37,11 +37,25 @@ func (s *ClaudeSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, r
 	if req.MaxTokens != nil {
 		maxTokens = *req.MaxTokens
 	}
+	// Claude API 的 system prompt 是独立顶级字段，不能放在 messages 里
+	var systemParts []string
+	var messages []base.Message
+	for _, m := range req.Messages {
+		if strings.EqualFold(m.Role, "system") {
+			systemParts = append(systemParts, m.Content)
+		} else {
+			messages = append(messages, m)
+		}
+	}
+
 	payload := map[string]any{
 		"model":      req.Model,
-		"messages":   req.Messages,
+		"messages":   messages,
 		"max_tokens": maxTokens,
 		"stream":     req.Stream,
+	}
+	if len(systemParts) > 0 {
+		payload["system"] = strings.Join(systemParts, "\n")
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {

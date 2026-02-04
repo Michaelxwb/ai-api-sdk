@@ -33,8 +33,14 @@ func (s *GeminiSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, r
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = s.DefaultBaseURL()
 	}
+	// Gemini API 的 system prompt 是独立的 systemInstruction 字段，contents 只支持 user/model
+	var systemParts []string
 	contents := make([]map[string]any, 0, len(req.Messages))
 	for _, m := range req.Messages {
+		if strings.EqualFold(m.Role, "system") {
+			systemParts = append(systemParts, m.Content)
+			continue
+		}
 		role := "user"
 		if strings.EqualFold(m.Role, "assistant") {
 			role = "model"
@@ -46,6 +52,11 @@ func (s *GeminiSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, r
 	}
 	payload := map[string]any{
 		"contents": contents,
+	}
+	if len(systemParts) > 0 {
+		payload["systemInstruction"] = map[string]any{
+			"parts": []map[string]string{{"text": strings.Join(systemParts, "\n")}},
+		}
 	}
 	body, err := json.Marshal(payload)
 	if err != nil {
