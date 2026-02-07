@@ -98,6 +98,8 @@ func example1_NoStore(cli *client.Client, ctx context.Context) {
 			Role:    "user",
 			Content: firstPrompt,
 		}},
+		// 多轮对话需复用上下文，不应开启单轮隔离
+		StartNewChat: false,
 	})
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -117,8 +119,9 @@ func example1_NoStore(cli *client.Client, ctx context.Context) {
 		fmt.Print("第二次回答: ")
 	}
 	text2, err := chat(ctx, sess, base.ChatRequest{
-		Model:    modelName,
-		Messages: append(history, base.Message{Role: "user", Content: secondPrompt}),
+		Model:        modelName,
+		Messages:     append(history, base.Message{Role: "user", Content: secondPrompt}),
+		StartNewChat: false,
 	})
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -148,6 +151,7 @@ func example2_MemoryStore(cli *client.Client, ctx context.Context) {
 			Role:    "user",
 			Content: firstPrompt,
 		}},
+		StartNewChat: false,
 	})
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -166,6 +170,7 @@ func example2_MemoryStore(cli *client.Client, ctx context.Context) {
 			Role:    "user",
 			Content: secondPrompt,
 		}},
+		StartNewChat: false,
 	})
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -198,6 +203,7 @@ func example3_FileStore(cli *client.Client, ctx context.Context) {
 			Role:    "user",
 			Content: firstPrompt,
 		}},
+		StartNewChat: false,
 	})
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -216,6 +222,7 @@ func example3_FileStore(cli *client.Client, ctx context.Context) {
 			Role:    "user",
 			Content: secondPrompt,
 		}},
+		StartNewChat: false,
 	})
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -253,6 +260,7 @@ func example4_SQLiteStore(cli *client.Client, ctx context.Context) {
 			Role:    "user",
 			Content: firstPrompt,
 		}},
+		StartNewChat: false,
 	})
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -271,6 +279,7 @@ func example4_SQLiteStore(cli *client.Client, ctx context.Context) {
 			Role:    "user",
 			Content: secondPrompt,
 		}},
+		StartNewChat: false,
 	})
 	if err != nil {
 		log.Printf("Error: %v", err)

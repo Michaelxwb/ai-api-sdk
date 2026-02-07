@@ -175,6 +175,17 @@ fmt.Println(resp2.Text)
 
 多轮对话的完整教程见 [Session 完整指南](session-guide.md)。
 
+## 5.1 单轮隔离（StartNewChat）
+
+如果你需要“多次单轮、互不依赖”，可以开启 `StartNewChat`：
+
+```go
+resp, err := cli.NewSession("openai").Chat(context.Background(), base.ChatRequest{
+    Messages:     []base.Message{{Role: "user", Content: "你好"}},
+    StartNewChat: true,
+})
+```
+
 ## 6. 常见问题
 
 - **配置文件加载失败**：确认 `config.yaml` 在当前目录，或传入绝对路径。

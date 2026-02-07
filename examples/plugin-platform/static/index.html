@@ -1,0 +1,458 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Plugin Platform Console</title>
+  <style>
+    :root {
+      --bg: #f2efe9;
+      --bg-accent: #f8f4ee;
+      --ink: #1f2933;
+      --muted: #5f6c7b;
+      --accent: #ff8a3d;
+      --accent-2: #ffb066;
+      --card: #ffffff;
+      --border: #e2ded6;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "IBM Plex Sans", "Source Sans 3", "Segoe UI", sans-serif;
+      background: radial-gradient(circle at top, #ffffff 0%, var(--bg) 45%, #efe9df 100%);
+      color: var(--ink);
+      min-height: 100vh;
+    }
+
+    header {
+      padding: 32px 24px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: 0.3px;
+    }
+
+    .container {
+      max-width: 1100px;
+      margin: 0 auto;
+      padding: 0 24px 48px;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      padding: 20px;
+      box-shadow: 0 20px 45px rgba(31, 41, 51, 0.08);
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: minmax(240px, 320px) 1fr;
+      gap: 24px;
+    }
+
+    .section-title {
+      font-size: 14px;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin: 0 0 12px;
+    }
+
+    .form-field {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 12px;
+    }
+
+    label {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    input, textarea {
+      padding: 10px 12px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      font-size: 14px;
+      font-family: inherit;
+    }
+
+    textarea {
+      min-height: 80px;
+      resize: vertical;
+    }
+
+    button {
+      border: none;
+      border-radius: 999px;
+      padding: 10px 16px;
+      background: var(--accent);
+      color: #1a120b;
+      font-weight: 600;
+      cursor: pointer;
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    button.secondary {
+      background: #f4ede4;
+      color: var(--ink);
+      border: 1px solid var(--border);
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    button:hover {
+      box-shadow: 0 8px 16px rgba(255, 138, 61, 0.2);
+    }
+
+    .config-list {
+      display: grid;
+      gap: 16px;
+    }
+
+    .config-card {
+      border: 1px solid var(--border);
+      border-radius: 14px;
+      padding: 16px;
+      background: var(--bg-accent);
+      animation: fadeIn 0.4s ease;
+    }
+
+    .config-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      color: var(--muted);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #d9c7b8;
+    }
+
+    .status-dot.connected {
+      background: #32c785;
+    }
+
+    .meta {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .chat-box {
+      display: grid;
+      gap: 8px;
+    }
+
+    .chat-log {
+      background: #fff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 12px;
+      min-height: 80px;
+      font-size: 13px;
+      white-space: pre-wrap;
+    }
+
+    .helper {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 6px;
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @media (max-width: 920px) {
+      .grid {
+        grid-template-columns: 1fr;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header class="container">
+    <div>
+      <h1>Plugin Platform Console</h1>
+      <div class="toolbar">WebSocket: <strong>ws://localhost:8080/ws?configId=YOUR_CONFIG_ID</strong></div>
+    </div>
+    <button class="secondary" id="refresh">Refresh</button>
+  </header>
+
+  <main class="container grid">
+    <section class="panel">
+      <h2 class="section-title">Create Config</h2>
+      <form id="config-form">
+        <div class="form-field">
+          <label for="name">Name</label>
+          <input id="name" name="name" placeholder="e.g. ChatGPT Browser" required />
+        </div>
+        <div class="form-field">
+          <label for="platform">Platform</label>
+          <input id="platform" name="platform" placeholder="e.g. OpenAI Web" />
+        </div>
+        <div class="form-field">
+          <label for="url">Target URL</label>
+          <input id="url" name="url" placeholder="https://..." />
+        </div>
+        <button type="submit">Create</button>
+        <div class="helper">After creating, connect your plugin using the config ID.</div>
+      </form>
+    </section>
+
+    <section class="panel">
+      <h2 class="section-title">Connected Platforms</h2>
+      <div id="config-list" class="config-list"></div>
+    </section>
+  </main>
+
+  <script>
+    const listEl = document.getElementById('config-list');
+    const refreshBtn = document.getElementById('refresh');
+    const form = document.getElementById('config-form');
+
+    async function api(path, options = {}) {
+      const res = await fetch(path, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options,
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        const message = data.error || 'Request failed';
+        throw new Error(message);
+      }
+      return data;
+    }
+
+    function formatDate(value) {
+      if (!value) return 'N/A';
+      const date = new Date(value);
+      return date.toLocaleString();
+    }
+
+    function createCard(config) {
+      const card = document.createElement('div');
+      card.className = 'config-card';
+
+      const connectedClass = config.connected ? 'connected' : '';
+      const locatorStatus = config.locators ? 'Locators ready' : 'Locators missing';
+
+      card.innerHTML = `
+        <div class="config-header">
+          <div>
+            <strong>${config.name}</strong>
+            <div class="meta">${config.platform || 'Platform not set'} - ${config.url || 'URL not set'}</div>
+          </div>
+          <div class="status">
+            <span class="status-dot ${connectedClass}"></span>
+            ${config.connected ? 'Connected' : 'Disconnected'}
+          </div>
+        </div>
+        <div class="meta">Config ID: <strong>${config.id}</strong></div>
+        <div class="meta">Created: ${formatDate(config.createdAt)} - ${locatorStatus}</div>
+        <div class="actions">
+          <button data-action="locate" data-id="${config.id}">Locate Elements</button>
+          <button class="secondary" data-action="reload" data-id="${config.id}">Reload</button>
+        </div>
+        <div class="chat-box">
+          <textarea data-role="chat-input" placeholder="Type a test message..."></textarea>
+          <button data-action="chat" data-id="${config.id}">Send Chat</button>
+          <div class="chat-log" data-role="chat-log">Awaiting messages.</div>
+        </div>
+      `;
+      return card;
+    }
+
+    async function loadConfigs() {
+      listEl.innerHTML = '<div class="meta">Loading...</div>';
+      try {
+        const configs = await api('/api/configs');
+        if (!configs.length) {
+          listEl.innerHTML = '<div class="meta">No configs yet. Create one to get started.</div>';
+          return;
+        }
+        listEl.innerHTML = '';
+        configs.forEach((config) => {
+          listEl.appendChild(createCard(config));
+        });
+      } catch (err) {
+        listEl.innerHTML = `<div class="meta">${err.message}</div>`;
+      }
+    }
+
+    async function handleLocate(id, logEl) {
+      logEl.textContent = 'Requesting locator confirmation...';
+      try {
+        const data = await api(`/api/configs/${id}/locate`, { method: 'POST' });
+        logEl.textContent = `Locator updated:\n${JSON.stringify(data.locators, null, 2)}`;
+        await loadConfigs();
+      } catch (err) {
+        logEl.textContent = `Locate failed: ${err.message}`;
+      }
+    }
+
+    async function handleChat(id, inputEl, logEl, chatBtn) {
+      const text = inputEl.value.trim();
+      if (!text) {
+        logEl.textContent = 'Please enter a message.';
+        return;
+      }
+      chatBtn.disabled = true;
+      logEl.textContent = 'Streaming...';
+      try {
+        const res = await fetch('/api/chat', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ configId: id, text, stream: true }),
+        });
+
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new Error(errData.error || 'Request failed');
+        }
+
+        console.log('[chat] SSE response received, status:', res.status);
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let eventType = '';
+        let chunkCount = 0;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) {
+            console.log('[chat] stream done, total chunks:', chunkCount);
+            break;
+          }
+          const text = decoder.decode(value, { stream: true });
+          console.log('[chat] raw data:', text.slice(0, 200));
+          buffer += text;
+
+          const lines = buffer.split('\n');
+          buffer = lines.pop() || '';
+
+          for (const line of lines) {
+            if (line.startsWith('event: ')) {
+              eventType = line.slice(7).trim();
+            } else if (line.startsWith('data: ')) {
+              try {
+                const data = JSON.parse(line.slice(6));
+                console.log('[chat] event:', eventType, 'data:', JSON.stringify(data).slice(0, 100));
+                if (eventType === 'chunk') {
+                  if (chunkCount === 0) logEl.textContent = '';
+                  logEl.textContent += data.chunk;
+                  chunkCount++;
+                } else if (eventType === 'done') {
+                  if (data.content) {
+                    logEl.textContent = data.content;
+                  }
+                  chunkCount++;
+                } else if (eventType === 'error') {
+                  logEl.textContent += '\n[Error: ' + data.error + ']';
+                }
+              } catch (parseErr) {
+                console.error('[chat] JSON parse error:', parseErr, 'line:', line);
+              }
+              eventType = '';
+            }
+          }
+        }
+
+        if (!logEl.textContent.trim() || logEl.textContent === 'Streaming...') {
+          logEl.textContent = 'No content returned.';
+        }
+      } catch (err) {
+        console.error('[chat] error:', err);
+        logEl.textContent = 'Chat failed: ' + err.message;
+      } finally {
+        chatBtn.disabled = false;
+      }
+    }
+
+    listEl.addEventListener('click', async (event) => {
+      const action = event.target.dataset.action;
+      if (!action) return;
+      const card = event.target.closest('.config-card');
+      const logEl = card.querySelector('[data-role="chat-log"]');
+      const id = event.target.dataset.id;
+      if (action === 'locate') {
+        await handleLocate(id, logEl);
+      }
+      if (action === 'chat') {
+        const inputEl = card.querySelector('[data-role="chat-input"]');
+        await handleChat(id, inputEl, logEl, event.target);
+      }
+      if (action === 'reload') {
+        await loadConfigs();
+      }
+    });
+
+    form.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      const formData = new FormData(form);
+      const payload = {
+        name: formData.get('name'),
+        platform: formData.get('platform'),
+        url: formData.get('url'),
+      };
+      try {
+        await api('/api/configs', {
+          method: 'POST',
+          body: JSON.stringify(payload),
+        });
+        form.reset();
+        await loadConfigs();
+      } catch (err) {
+        alert(err.message);
+      }
+    });
+
+    refreshBtn.addEventListener('click', loadConfigs);
+
+    loadConfigs();
+  </script>
+</body>
+</html>

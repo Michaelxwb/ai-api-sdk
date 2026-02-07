@@ -77,6 +77,15 @@ func (s *Session) ChatStream(ctx context.Context, req base.ChatRequest) (<-chan 
 func (s *Session) ID() string
 ```
 
+**单轮隔离（StartNewChat）**：
+
+```go
+resp, err := cli.NewSession("openai").Chat(ctx, base.ChatRequest{
+    Messages:     []base.Message{{Role: "user", Content: "你好"}},
+    StartNewChat: true,
+})
+```
+
 ### 流式示例
 
 ```go

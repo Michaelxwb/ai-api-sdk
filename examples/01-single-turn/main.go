@@ -19,7 +19,7 @@ import (
 
 const (
 	providerName = "vllm_local"
-	modelName    = "minimaxai/minimax-m2.1"
+	modelName    = "claude-sonnet-4-5-20250929"
 	promptText   = "什么是Rust语言？"
 	streamOutput = true
 )
@@ -37,8 +37,8 @@ func main() {
 	// 场景1：无SessionStore（最简单）
 	// ========================================
 	//fmt.Println("场景1：=========================无SessionStore=========================")
-	//example1_NoStore(cli, ctx)
-	//time.Sleep(10 * time.Second)
+	example1_NoStore(cli, ctx)
+	time.Sleep(10 * time.Second)
 
 	// ========================================
 	// 场景2：Memory SessionStore（内存审计）
@@ -50,16 +50,16 @@ func main() {
 	// ========================================
 	// 场景3：File SessionStore
 	// ========================================
-	fmt.Println("\n场景3：=========================File SessionStore=========================")
-	example3_FileStore(cli, ctx)
-	time.Sleep(10 * time.Second)
+	//fmt.Println("\n场景3：=========================File SessionStore=========================")
+	//example3_FileStore(cli, ctx)
+	//time.Sleep(10 * time.Second)
 
 	// ========================================
 	// 场景4：SQLite SessionStore
 	// ========================================
-	fmt.Println("\n场景4：=========================SQLite SessionStore=========================")
-	example4_SQLiteStore(cli, ctx)
-	time.Sleep(10 * time.Second)
+	//fmt.Println("\n场景4：=========================SQLite SessionStore=========================")
+	//example4_SQLiteStore(cli, ctx)
+	//time.Sleep(10 * time.Second)
 
 	// ========================================
 	// 场景5：MySQL SessionStore（需要配置）
@@ -97,6 +97,8 @@ func example1_NoStore(cli *client.Client, ctx context.Context) {
 			Role:    "user",
 			Content: promptText,
 		}},
+		// 单轮隔离：确保本次对话不依赖历史
+		StartNewChat: true,
 	})
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -105,6 +107,26 @@ func example1_NoStore(cli *client.Client, ctx context.Context) {
 
 	if !streamOutput {
 		fmt.Printf("回答: %s\n", text)
+	}
+
+	// 再来一次单轮对话，仍保持隔离（不依赖上一轮）
+	if streamOutput {
+		fmt.Print("第二次回答: ")
+	}
+	text2, err := chat(ctx, sess, base.ChatRequest{
+		Model: modelName,
+		Messages: []base.Message{{
+			Role:    "user",
+			Content: "再问一次：你还记得我刚才的问题吗？",
+		}},
+		StartNewChat: true,
+	})
+	if err != nil {
+		log.Printf("Error: %v", err)
+		return
+	}
+	if !streamOutput {
+		fmt.Printf("第二次回答: %s\n", text2)
 	}
 }
 
@@ -127,6 +149,8 @@ func example2_MemoryStore(cli *client.Client, ctx context.Context) {
 			Role:    "user",
 			Content: promptText,
 		}},
+		// 需要单轮隔离可改为 true（会跳过历史加载）
+		StartNewChat: false,
 	})
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -164,6 +188,8 @@ func example3_FileStore(cli *client.Client, ctx context.Context) {
 			Role:    "user",
 			Content: promptText,
 		}},
+		// 需要单轮隔离可改为 true（会跳过历史加载）
+		StartNewChat: false,
 	})
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -206,6 +232,8 @@ func example4_SQLiteStore(cli *client.Client, ctx context.Context) {
 			Role:    "user",
 			Content: promptText,
 		}},
+		// 需要单轮隔离可改为 true（会跳过历史加载）
+		StartNewChat: false,
 	})
 	if err != nil {
 		log.Printf("Error: %v", err)

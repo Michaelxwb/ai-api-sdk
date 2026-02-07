@@ -1,0 +1,22 @@
+{
+  "locators": {
+    "input": {
+      "selector": "textarea[placeholder^=\"给 DeepSeek\"], textarea._27c9245.ds-scroll-area.d96f2d2a",
+      "type": "textarea"
+    },
+    "sendButton": {
+      "selector": "",
+      "type": "div"
+    },
+    "replyArea": {
+      "selector": "div.dad65929",
+      "type": "div"
+    },
+    "createChat": {
+      "selector": "div._5a8ac7a",
+      "type": "div"
+    },
+    "platformUrl": "https://chat.deepseek.com/",
+    "createdAt": 1770368069765
+  }
+}

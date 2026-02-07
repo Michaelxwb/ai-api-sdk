@@ -8,6 +8,7 @@
 - 🌐 **多平台适配** - OpenAI、Claude、Gemini、Ollama 及兼容协议
 - 💬 **流式优先** - 原生流式支持，打字机效果
 - 🔄 **多轮对话** - 会话管理，支持多种存储方案
+- 🧩 **浏览器插件接入** - 统一 Session.Chat / ChatStream 调用
 - ⚙️ **灵活配置** - YAML 配置或代码构建
 
 ## 安装
@@ -88,6 +89,7 @@ ai-api-sdk/
 - 📖 [使用指南](docs/usage-guide.md)
 - 🔧 [API 参考](docs/api-reference.md)
 - 💡 [示例代码](examples/README.md)
+- 🧱 [内部设计文档](docs/internal/)（含 Session 架构与插件接入设计）
 
 ## 示例场景
 
@@ -95,6 +97,7 @@ ai-api-sdk/
 - 单轮对话（流式 / 非流式）
 - 多轮对话（Memory / File / SQLite / PostgreSQL / MySQL）
 - 代码构建凭证（无需配置文件）
+- 浏览器插件接入（统一 Session，见 `examples/05-browser-plugin`）
 
 完整示例矩阵请参考 [examples/README.md](examples/README.md)
 

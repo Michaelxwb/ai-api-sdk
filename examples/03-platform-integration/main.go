@@ -99,6 +99,8 @@ func example1_NoStore(cli *client.Client, ctx context.Context, cred *auth.Creden
 			Role:    "user",
 			Content: promptText,
 		}},
+		// 单轮隔离：确保本次对话不依赖历史
+		StartNewChat: true,
 	})
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -130,6 +132,8 @@ func example2_MemoryStore(cli *client.Client, ctx context.Context, cred *auth.Cr
 			Role:    "user",
 			Content: promptText,
 		}},
+		// 需要单轮隔离可改为 true（会跳过历史加载）
+		StartNewChat: false,
 	})
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -164,6 +168,8 @@ func example3_FileStore(cli *client.Client, ctx context.Context, cred *auth.Cred
 			Role:    "user",
 			Content: promptText,
 		}},
+		// 需要单轮隔离可改为 true（会跳过历史加载）
+		StartNewChat: false,
 	})
 	if err != nil {
 		log.Printf("Error: %v", err)
@@ -203,6 +209,8 @@ func example4_SQLiteStore(cli *client.Client, ctx context.Context, cred *auth.Cr
 			Role:    "user",
 			Content: promptText,
 		}},
+		// 需要单轮隔离可改为 true（会跳过历史加载）
+		StartNewChat: false,
 	})
 	if err != nil {
 		log.Printf("Error: %v", err)

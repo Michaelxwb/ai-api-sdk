@@ -9,12 +9,13 @@ type Message struct {
 
 // ChatRequest 是统一的请求结构。
 type ChatRequest struct {
-	Model       string    `json:"model"`
-	Messages    []Message `json:"messages"`
-	Temperature *float32  `json:"temperature,omitempty"`
-	MaxTokens   *int      `json:"max_tokens,omitempty"`
-	Stream      bool      `json:"stream,omitempty"`     // 是否启用流式模式（若 Provider 支持）
-	SessionID   string    `json:"session_id,omitempty"` // 可选：用于多轮对话的会话标识
+	Model        string    `json:"model"`
+	Messages     []Message `json:"messages"`
+	Temperature  *float32  `json:"temperature,omitempty"`
+	MaxTokens    *int      `json:"max_tokens,omitempty"`
+	Stream       bool      `json:"stream,omitempty"`     // 是否启用流式模式（若 Provider 支持）
+	SessionID    string    `json:"session_id,omitempty"` // 可选：用于多轮对话的会话标识
+	StartNewChat bool      `json:"startNewChat,omitempty"`
 }
 
 // Usage 表示 token 使用统计。

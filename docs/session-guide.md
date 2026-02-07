@@ -88,6 +88,21 @@ Session 是对话状态的载体，内部负责：
 - 非 Dify Provider：当 `store != nil` 且未显式指定 ID 时，首次请求会自动生成 UUID。
 - Dify Provider：会话 ID 通常来自响应（如 `conversation_id`），可通过 `WithID()` 恢复历史。
 
+**单轮隔离（StartNewChat）**：
+- 若需要每次对话互不依赖，可在请求中设置 `StartNewChat: true`，或创建 Session 时使用 `client.WithStartNewChat(true)`。
+- 启用后将跳过历史加载与持久化，不会复用/写回 `SessionID`。
+
+```go
+resp, err := sess.Chat(ctx, base.ChatRequest{
+    Messages:     []base.Message{{Role: "user", Content: "你好"}},
+    StartNewChat: true,
+})
+```
+
+```go
+sess := cli.NewSession("openai", client.WithStartNewChat(true))
+```
+
 ### 3.2 HistoryMode
 
 ```go

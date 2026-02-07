@@ -27,6 +27,8 @@ type Session struct {
 	id    string
 	mode  HistoryMode
 	meta  map[string]string
+	// 默认是否为新对话
+	startNewChat bool
 
 	// 内部状态
 	mu          sync.Mutex
@@ -81,10 +83,18 @@ func WithMeta(kv map[string]string) SessionOption {
 	}
 }
 
+// WithStartNewChat 设置是否每次都开启新对话（默认 false）
+func WithStartNewChat(enabled bool) SessionOption {
+	return func(s *Session) {
+		s.startNewChat = enabled
+	}
+}
+
 // Chat 发送非流式对话请求
 func (s *Session) Chat(ctx context.Context, req base.ChatRequest) (base.ChatResponse, error) {
+	startNewChat := req.StartNewChat || s.startNewChat
 	// 1. 懒生成SessionID
-	if s.store != nil && s.id == "" && !s.isDifyProvider() {
+	if !startNewChat && s.store != nil && s.id == "" && !s.isDifyProvider() {
 		s.mu.Lock()
 		if s.id == "" {
 			s.id = uuid.New().String()
@@ -94,7 +104,7 @@ func (s *Session) Chat(ctx context.Context, req base.ChatRequest) (base.ChatResp
 
 	// 2. 加载历史（如果HistoryAuto）
 	var historyMsgs []base.Message
-	if s.mode == HistoryAuto && s.store != nil && s.id != "" {
+	if !startNewChat && s.mode == HistoryAuto && s.store != nil && s.id != "" {
 		state, err := s.store.Get(ctx, s.id)
 		if err == nil && state != nil {
 			historyMsgs = state.Messages
@@ -103,11 +113,15 @@ func (s *Session) Chat(ctx context.Context, req base.ChatRequest) (base.ChatResp
 	}
 
 	// 3. 合并消息
-	allMsgs := append(historyMsgs, req.Messages...)
-	req.Messages = allMsgs
+	if !startNewChat {
+		allMsgs := append(historyMsgs, req.Messages...)
+		req.Messages = allMsgs
+	}
 
 	// 4. 发送请求（使用Client内部方法）
-	req.SessionID = s.id
+	if req.SessionID == "" && !startNewChat {
+		req.SessionID = s.id
+	}
 	var resp base.ChatResponse
 	var err error
 	if s.cred != nil || s.pc != nil {
@@ -136,7 +150,7 @@ func (s *Session) Chat(ctx context.Context, req base.ChatRequest) (base.ChatResp
 	}
 
 	// 5. 提取Dify conversation_id
-	if resp.SessionID != "" && s.id == "" {
+	if !startNewChat && resp.SessionID != "" && s.id == "" {
 		s.mu.Lock()
 		if s.id == "" {
 			s.id = resp.SessionID
@@ -146,7 +160,7 @@ func (s *Session) Chat(ctx context.Context, req base.ChatRequest) (base.ChatResp
 
 	// 6. 保存历史
 	sessionID := s.ID()
-	if s.store != nil && sessionID != "" {
+	if !startNewChat && s.store != nil && sessionID != "" {
 		newMsgs := append(req.Messages, base.Message{
 			Role:    "assistant",
 			Content: resp.Text,
@@ -177,8 +191,9 @@ func (s *Session) Chat(ctx context.Context, req base.ChatRequest) (base.ChatResp
 
 // ChatStream 发送流式对话请求
 func (s *Session) ChatStream(ctx context.Context, req base.ChatRequest) (<-chan streaming.StreamChunk, error) {
+	startNewChat := req.StartNewChat || s.startNewChat
 	// 1. 懒生成SessionID
-	if s.store != nil && s.id == "" && !s.isDifyProvider() {
+	if !startNewChat && s.store != nil && s.id == "" && !s.isDifyProvider() {
 		s.mu.Lock()
 		if s.id == "" {
 			s.id = uuid.New().String()
@@ -188,7 +203,7 @@ func (s *Session) ChatStream(ctx context.Context, req base.ChatRequest) (<-chan 
 
 	// 2. 加载历史（如果HistoryAuto）
 	var historyMsgs []base.Message
-	if s.mode == HistoryAuto && s.store != nil && s.id != "" {
+	if !startNewChat && s.mode == HistoryAuto && s.store != nil && s.id != "" {
 		state, err := s.store.Get(ctx, s.id)
 		if err == nil && state != nil {
 			historyMsgs = state.Messages
@@ -197,11 +212,15 @@ func (s *Session) ChatStream(ctx context.Context, req base.ChatRequest) (<-chan 
 	}
 
 	// 3. 合并消息
-	allMsgs := append(historyMsgs, req.Messages...)
-	req.Messages = allMsgs
+	if !startNewChat {
+		allMsgs := append(historyMsgs, req.Messages...)
+		req.Messages = allMsgs
+	}
 
 	// 4. 发送请求（使用Client内部方法）
-	req.SessionID = s.id
+	if req.SessionID == "" && !startNewChat {
+		req.SessionID = s.id
+	}
 	var stream <-chan streaming.StreamChunk
 	var err error
 	if s.cred != nil || s.pc != nil {
@@ -239,7 +258,7 @@ func (s *Session) ChatStream(ctx context.Context, req base.ChatRequest) (<-chan 
 		var sessionIDExtracted bool
 
 		for chunk := range stream {
-			if chunk.SessionID != "" && !sessionIDExtracted {
+			if !startNewChat && chunk.SessionID != "" && !sessionIDExtracted {
 				if s.id == "" {
 					s.mu.Lock()
 					if s.id == "" {
@@ -263,7 +282,7 @@ func (s *Session) ChatStream(ctx context.Context, req base.ChatRequest) (<-chan 
 		}
 
 		sessionID := s.ID()
-		if s.store != nil && sessionID != "" {
+		if !startNewChat && s.store != nil && sessionID != "" {
 			newMsgs := append(req.Messages, base.Message{
 				Role:    "assistant",
 				Content: fullText,

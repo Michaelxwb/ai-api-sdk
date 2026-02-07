@@ -256,4 +256,4 @@ sequenceDiagram
 - [文档索引](README.md)
 - [API 使用指南](api-guide.md)
 - [Session 完整指南](session-guide.md)
-- [Session 架构设计](design-session-unified-architecture.md)
+- [Session 架构设计](internal/design-session-unified-architecture.md)

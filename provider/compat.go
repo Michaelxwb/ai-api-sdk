@@ -10,6 +10,7 @@ type ChatRequest = base.ChatRequest
 type ChatResponse = base.ChatResponse
 type Message = base.Message
 type ProviderSpec = base.ProviderSpec
+type ProviderTransportSpec = base.ProviderTransportSpec
 type BuildOptions = base.BuildOptions
 
 // Re-export streaming types

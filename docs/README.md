@@ -13,7 +13,8 @@
 
 ### 架构设计
 - [架构概览](architecture.md) - 整体架构和模块划分
-- [Session 架构设计](design-session-unified-architecture.md) - Session 统一架构设计
+- [Session 架构设计](internal/design-session-unified-architecture.md) - Session 统一架构设计
+- [浏览器插件接入设计](internal/design-browser-plugin-integration.md) - 插件接入模块设计说明
 
 ### 扩展开发
 - [自定义网关配置指南](custom-gateway-guide.md) - 非标准模型接入、认证方式、数据库表结构
@@ -26,9 +27,11 @@
 - **配置多个 Provider** → [配置指南](configuration.md)
 - **接入自定义网关/非标准 AI 模型** → [自定义网关配置指南](custom-gateway-guide.md)
 - **实现多轮对话** → [Session 完整指南](session-guide.md)
+- **浏览器插件接入** → [示例代码](../examples/README.md)（`examples/05-browser-plugin`）
+- **查看插件接入设计** → [浏览器插件接入设计](internal/design-browser-plugin-integration.md)
 - **使用数据库存储会话** → [Session 完整指南](session-guide.md)
 - **实现流式输出（打字机效果）** → [API 使用指南](api-guide.md)
 - **测试 Provider 配置是否正确** → [API 使用指南](api-guide.md)
 - **理解项目架构** → [架构概览](architecture.md)
-- **查看 Session 架构设计** → [Session 架构设计](design-session-unified-architecture.md)
+- **查看 Session 架构设计** → [Session 架构设计](internal/design-session-unified-architecture.md)
 - **查看完整示例** → [示例代码](../examples/README.md)
