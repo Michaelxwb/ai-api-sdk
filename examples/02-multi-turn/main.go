@@ -19,7 +19,7 @@ import (
 
 const (
 	providerName = "vllm_local"
-	modelName    = "minimaxai/minimax-m2.1"
+	modelName    = "claude-sonnet-4-5-20250929"
 	firstPrompt  = "请记住：我最喜欢的编程语言是 Python。"
 	secondPrompt = "我最喜欢的编程语言是什么？"
 	streamOutput = true

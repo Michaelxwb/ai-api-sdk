@@ -78,7 +78,9 @@ func (s *PluginSpec) ParseResponse(resp *http.Response) (base.ChatResponse, erro
 		Text      string `json:"text"`
 		SessionID string `json:"sessionId,omitempty"`
 	}
-	_ = json.Unmarshal(data, &parsed)
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return base.ChatResponse{}, fmt.Errorf("plugin: parse response failed: %w", err)
+	}
 	return base.ChatResponse{Text: parsed.Text, SessionID: parsed.SessionID, Raw: data}, nil
 }
 

@@ -95,7 +95,9 @@ func (s *GeminiSpec) ParseResponse(resp *http.Response) (base.ChatResponse, erro
 			} `json:"content"`
 		} `json:"candidates"`
 	}
-	_ = json.Unmarshal(data, &parsed)
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return base.ChatResponse{}, fmt.Errorf("gemini: parse response failed: %w", err)
+	}
 	text := ""
 	if len(parsed.Candidates) > 0 && len(parsed.Candidates[0].Content.Parts) > 0 {
 		text = parsed.Candidates[0].Content.Parts[0].Text

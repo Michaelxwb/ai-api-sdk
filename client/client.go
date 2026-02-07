@@ -2,7 +2,6 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -102,8 +101,8 @@ func (c *Client) chatWith(ctx context.Context, cred *auth.Credential, pc *config
 	}
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		data, _ := io.ReadAll(resp.Body)
-		return base.ChatResponse{}, fmt.Errorf("client: status %d: %s", resp.StatusCode, string(data))
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		return base.ChatResponse{}, &APIError{StatusCode: resp.StatusCode, Body: string(data), Op: "chat"}
 	}
 	return prep.spec.ParseResponse(resp)
 }

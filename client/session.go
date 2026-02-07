@@ -183,7 +183,11 @@ func (s *Session) Chat(ctx context.Context, req base.ChatRequest) (base.ChatResp
 			state.Meta = m
 		}
 
-		_ = s.store.Save(ctx, state) // 失败不影响响应
+		if err := s.store.Save(ctx, state); err != nil {
+			if s.client.SessionConfig.OnStoreError != nil {
+				s.client.SessionConfig.OnStoreError(ctx, err)
+			}
+		}
 	}
 
 	return resp, nil
@@ -305,7 +309,11 @@ func (s *Session) ChatStream(ctx context.Context, req base.ChatRequest) (<-chan 
 				state.Meta = m
 			}
 
-			_ = s.store.Save(ctx, state) // 失败不影响响应
+			if err := s.store.Save(ctx, state); err != nil {
+				if s.client.SessionConfig.OnStoreError != nil {
+					s.client.SessionConfig.OnStoreError(ctx, err)
+				}
+			}
 		}
 	}()
 

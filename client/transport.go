@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"github.com/Michaelxwb/ai-api-sdk/auth"
@@ -22,11 +23,13 @@ func (t *AuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 	}
 	if t.Strategy != nil {
 		if err := t.Strategy.Apply(req); err != nil {
-			return nil, err
+			return nil, fmt.Errorf("client: apply auth strategy: %w", err)
 		}
 	}
 	if t.Cred != nil {
-		_ = auth.CustomHeaderStrategy{Headers: t.Cred.Headers, QueryParams: t.Cred.QueryParams}.Apply(req)
+		if err := (auth.CustomHeaderStrategy{Headers: t.Cred.Headers, QueryParams: t.Cred.QueryParams}).Apply(req); err != nil {
+			return nil, fmt.Errorf("client: apply custom headers: %w", err)
+		}
 	}
 	resp, err := base.RoundTrip(req)
 	if err != nil {
@@ -39,7 +42,9 @@ func (t *AuthTransport) RoundTrip(req *http.Request) (*http.Response, error) {
 		}
 		// Retry once with updated token
 		if t.Strategy != nil {
-			_ = t.Strategy.Apply(req)
+			if err := t.Strategy.Apply(req); err != nil {
+				return nil, fmt.Errorf("client: apply auth strategy: %w", err)
+			}
 		}
 		return base.RoundTrip(req)
 	}

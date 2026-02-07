@@ -144,13 +144,13 @@ func (m *Manager) RefreshOAuth(ctx context.Context, cred *Credential) error {
 	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(form.Encode()))
 	if err != nil {
-		return err
+		return fmt.Errorf("auth manager: refresh oauth: %w", err)
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := (&http.Client{Timeout: 30 * time.Second}).Do(req)
 	if err != nil {
-		return err
+		return fmt.Errorf("auth manager: refresh oauth: %w", err)
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
@@ -162,7 +162,7 @@ func (m *Manager) RefreshOAuth(ctx context.Context, cred *Credential) error {
 		RefreshToken string `json:"refresh_token"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&payload); err != nil {
-		return err
+		return fmt.Errorf("auth manager: refresh oauth decode: %w", err)
 	}
 	if payload.AccessToken == "" {
 		return errors.New("auth manager: refresh missing access_token")

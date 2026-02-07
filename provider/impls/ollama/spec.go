@@ -64,7 +64,9 @@ func (s *OllamaSpec) ParseResponse(resp *http.Response) (base.ChatResponse, erro
 			Content string `json:"content"`
 		} `json:"message"`
 	}
-	_ = json.Unmarshal(data, &parsed)
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return base.ChatResponse{}, fmt.Errorf("ollama: parse response failed: %w", err)
+	}
 	return base.ChatResponse{Text: parsed.Message.Content, Raw: data}, nil
 }
 

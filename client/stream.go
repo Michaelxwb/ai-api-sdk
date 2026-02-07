@@ -37,9 +37,9 @@ func (c *Client) chatWithStream(ctx context.Context, cred *auth.Credential, pc *
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		data, _ := io.ReadAll(resp.Body)
+		data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		_ = resp.Body.Close()
-		return nil, fmt.Errorf("client: status %d: %s", resp.StatusCode, string(data))
+		return nil, &APIError{StatusCode: resp.StatusCode, Body: string(data), Op: "stream"}
 	}
 	return streamSpec.ParseStreamResponse(resp)
 }

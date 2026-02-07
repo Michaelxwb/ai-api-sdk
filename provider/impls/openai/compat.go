@@ -89,7 +89,9 @@ func (s *OpenAICompatSpec) ParseResponse(resp *http.Response) (base.ChatResponse
 			} `json:"message"`
 		} `json:"choices"`
 	}
-	_ = json.Unmarshal(data, &parsed)
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return base.ChatResponse{}, fmt.Errorf("openai_compat: parse response failed: %w", err)
+	}
 	text := ""
 	if len(parsed.Choices) > 0 {
 		text = parsed.Choices[0].Message.Content

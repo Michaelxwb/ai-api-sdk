@@ -41,3 +41,17 @@ sessions.json
 *.db
 *.db-shm
 *.db-wal
+
+# Claude Code (tool-specific config)
+.claude/
+
+# Trellis (keep spec/ only)
+.trellis
+#.trellis/tasks/
+#.trellis/scripts/
+#.trellis/workspace/
+#.trellis/workflow.md
+#.trellis/worktree.yaml
+#.trellis/.template-hashes.json
+#.trellis/.version
+#.trellis/.gitignore

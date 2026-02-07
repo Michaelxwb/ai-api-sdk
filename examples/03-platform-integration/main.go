@@ -15,7 +15,7 @@ import (
 )
 
 const (
-	modelName    = "minimaxai/minimax-m2.1"
+	modelName    = "claude-sonnet-4-5-20250929"
 	promptText   = "什么是Go语言？"
 	streamOutput = true
 )

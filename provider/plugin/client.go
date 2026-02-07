@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"sync"
 
@@ -120,6 +121,13 @@ func (c *Client) readLoop() {
 	for {
 		var wire wireMessage
 		if err := conn.ReadJSON(&wire); err != nil {
+			// notify handler about disconnect reason before closing
+			c.mu.RLock()
+			h := c.handler
+			c.mu.RUnlock()
+			if h != nil {
+				h(&Message{Type: MsgError, Payload: []byte(fmt.Sprintf(`{"error":%q}`, err.Error()))})
+			}
 			_ = c.Close()
 			return
 		}
