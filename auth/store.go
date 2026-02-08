@@ -77,6 +77,10 @@ func (s *FileStore) List() ([]*Credential, error) {
 		return s.decryptEnvelope(&env)
 	}
 	// Plain JSON array
+	// 在尝试解密 envelope 失败后，检查是否要求加密
+	if s.Encrypted {
+		return nil, errors.New("credential store: encrypted mode enabled but file is not encrypted")
+	}
 	var creds []*Credential
 	if err := json.Unmarshal(data, &creds); err != nil {
 		return nil, fmt.Errorf("credential store: unmarshal failed: %w", err)

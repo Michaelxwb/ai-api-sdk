@@ -75,7 +75,7 @@ func (s *ClaudeSpec) ParseResponse(resp *http.Response) (base.ChatResponse, erro
 	if resp == nil {
 		return base.ChatResponse{}, fmt.Errorf("claude: response is nil")
 	}
-	data, err := io.ReadAll(resp.Body)
+	data, err := io.ReadAll(io.LimitReader(resp.Body, 4<<20))
 	if err != nil {
 		return base.ChatResponse{}, err
 	}

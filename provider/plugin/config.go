@@ -9,6 +9,7 @@ import (
 const (
 	defaultRequestTimeout = 120 * time.Second
 	defaultDialTimeout    = 10 * time.Second
+	defaultReadTimeout    = 5 * time.Minute
 	defaultCallbackBuffer = 16
 )
 
@@ -20,6 +21,7 @@ type Config struct {
 	Locators       *ElementLocators  `json:"locators,omitempty" yaml:"locators,omitempty"`
 	RequestTimeout time.Duration     `json:"requestTimeout,omitempty" yaml:"request_timeout,omitempty"`
 	DialTimeout    time.Duration     `json:"dialTimeout,omitempty" yaml:"dial_timeout,omitempty"`
+	ReadTimeout    time.Duration     `json:"readTimeout,omitempty" yaml:"read_timeout,omitempty"`
 	CallbackBuffer int               `json:"callbackBuffer,omitempty" yaml:"callback_buffer,omitempty"`
 	Headers        map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
 }
@@ -30,6 +32,9 @@ func (c Config) normalize() Config {
 	}
 	if c.DialTimeout <= 0 {
 		c.DialTimeout = defaultDialTimeout
+	}
+	if c.ReadTimeout <= 0 {
+		c.ReadTimeout = defaultReadTimeout
 	}
 	if c.CallbackBuffer <= 0 {
 		c.CallbackBuffer = defaultCallbackBuffer

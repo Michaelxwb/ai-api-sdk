@@ -102,7 +102,8 @@ func (c *Client) chatWith(ctx context.Context, cred *auth.Credential, pc *config
 	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
-		return base.ChatResponse{}, &APIError{StatusCode: resp.StatusCode, Body: string(data), Op: "chat"}
+		bodyStr := truncateAPIErrorBody(string(data))
+		return base.ChatResponse{}, &APIError{StatusCode: resp.StatusCode, Body: bodyStr, Op: "chat"}
 	}
 	return prep.spec.ParseResponse(resp)
 }

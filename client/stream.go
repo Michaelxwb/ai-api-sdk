@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"github.com/Michaelxwb/ai-api-sdk/auth"
 	"github.com/Michaelxwb/ai-api-sdk/config"
@@ -14,15 +15,28 @@ import (
 
 // chatWithStream 内部实现方法（仅供Session.ChatStream使用）
 func (c *Client) chatWithStream(ctx context.Context, cred *auth.Credential, pc *config.ProviderConfig, req base.ChatRequest) (<-chan streaming.StreamChunk, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	var cancel context.CancelFunc
+	if _, ok := ctx.Deadline(); !ok {
+		ctx, cancel = context.WithTimeout(ctx, 5*time.Minute)
+	}
 	req.Stream = true
 
 	prep, err := c.prepareChatWithRequest(ctx, cred, pc, req)
 	if err != nil {
+		if cancel != nil {
+			cancel()
+		}
 		return nil, err
 	}
 
 	streamSpec, ok := prep.spec.(streaming.ProviderStreamSpec)
 	if !ok {
+		if cancel != nil {
+			cancel()
+		}
 		return nil, fmt.Errorf("client: provider spec %s does not support streaming", prep.spec.Name())
 	}
 
@@ -34,14 +48,39 @@ func (c *Client) chatWithStream(ctx context.Context, cred *auth.Credential, pc *
 	streamClient := &http.Client{Transport: transport, Timeout: 0}
 	resp, err := streamClient.Do(prep.httpReq)
 	if err != nil {
+		if cancel != nil {
+			cancel()
+		}
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
 		data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 		_ = resp.Body.Close()
-		return nil, &APIError{StatusCode: resp.StatusCode, Body: string(data), Op: "stream"}
+		bodyStr := truncateAPIErrorBody(string(data))
+		if cancel != nil {
+			cancel()
+		}
+		return nil, &APIError{StatusCode: resp.StatusCode, Body: bodyStr, Op: "stream"}
 	}
-	return streamSpec.ParseStreamResponse(resp)
+	stream, err := streamSpec.ParseStreamResponse(resp)
+	if err != nil {
+		if cancel != nil {
+			cancel()
+		}
+		return nil, err
+	}
+	if cancel == nil {
+		return stream, nil
+	}
+	out := make(chan streaming.StreamChunk, 16)
+	go func() {
+		defer close(out)
+		defer cancel()
+		for chunk := range stream {
+			out <- chunk
+		}
+	}()
+	return out, nil
 }
 
 // chatWithStreamSync 内部实现方法（仅供内部使用）

@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"sync"
+	"time"
 
 	"github.com/gorilla/websocket"
 )
@@ -118,8 +119,14 @@ func (c *Client) readLoop() {
 		_ = c.Close()
 		return
 	}
+	conn.SetReadLimit(4 << 20) // 4MB max message size
+	readTimeout := c.cfg.ReadTimeout
+	if readTimeout <= 0 {
+		readTimeout = 5 * time.Minute
+	}
 	for {
 		var wire wireMessage
+		_ = conn.SetReadDeadline(time.Now().Add(readTimeout))
 		if err := conn.ReadJSON(&wire); err != nil {
 			// notify handler about disconnect reason before closing
 			c.mu.RLock()

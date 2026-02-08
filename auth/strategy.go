@@ -6,6 +6,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"time"
@@ -70,6 +71,9 @@ func (s CustomHeaderStrategy) Apply(req *http.Request) error {
 		return nil
 	}
 	for k, v := range s.Headers {
+		if containsCRLF(k) || containsCRLF(v) {
+			return fmt.Errorf("auth: header injection detected in custom header %q", k)
+		}
 		if strings.TrimSpace(k) == "" {
 			continue
 		}
@@ -78,6 +82,9 @@ func (s CustomHeaderStrategy) Apply(req *http.Request) error {
 	if len(s.QueryParams) > 0 && req.URL != nil {
 		q := req.URL.Query()
 		for k, v := range s.QueryParams {
+			if containsCRLF(k) || containsCRLF(v) {
+				return fmt.Errorf("auth: header injection detected in custom query param %q", k)
+			}
 			if strings.TrimSpace(k) == "" {
 				continue
 			}
@@ -220,4 +227,8 @@ func int64FromMeta(meta map[string]any, key string, def int64) int64 {
 	default:
 		return def
 	}
+}
+
+func containsCRLF(s string) bool {
+	return strings.ContainsAny(s, "\r\n")
 }

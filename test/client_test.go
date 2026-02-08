@@ -575,8 +575,12 @@ func TestClient_ChatWith(t *testing.T) {
 		if !errors.As(err, &apiErr) {
 			t.Fatalf("expected APIError, got %T", err)
 		}
-		if len(apiErr.Body) != 1<<20 {
-			t.Fatalf("Body length = %d, want %d", len(apiErr.Body), 1<<20)
+		if !strings.HasSuffix(apiErr.Body, "...(truncated)") {
+			t.Fatalf("Body suffix = %q, want %q", apiErr.Body[len(apiErr.Body)-len("...(truncated)"):], "...(truncated)")
+		}
+		wantLen := 4096 + len("...(truncated)")
+		if len(apiErr.Body) != wantLen {
+			t.Fatalf("Body length = %d, want %d", len(apiErr.Body), wantLen)
 		}
 	})
 }

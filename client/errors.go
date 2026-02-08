@@ -9,6 +9,16 @@ type APIError struct {
 	Op         string // operation, e.g. "chat", "stream"
 }
 
+const apiErrorBodyLimit = 4096
+const apiErrorBodySuffix = "...(truncated)"
+
+func truncateAPIErrorBody(body string) string {
+	if len(body) > apiErrorBodyLimit {
+		return body[:apiErrorBodyLimit] + apiErrorBodySuffix
+	}
+	return body
+}
+
 func (e *APIError) Error() string {
 	return fmt.Sprintf("client: %s: status %d: %s", e.Op, e.StatusCode, e.Body)
 }

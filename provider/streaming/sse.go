@@ -3,8 +3,8 @@ package streaming
 import (
 	"bufio"
 	"context"
+	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strings"
 )
@@ -35,7 +35,9 @@ func (p *SSEParser) Parse(
 		defer close(out)
 		defer func() { _ = resp.Body.Close() }()
 
-		reader := bufio.NewReader(resp.Body)
+		const maxLineSize = 1 << 20
+		scanner := bufio.NewScanner(resp.Body)
+		scanner.Buffer(make([]byte, 0, 64*1024), maxLineSize)
 		var currentEvent string
 		dataLines := make([]string, 0, 4)
 
@@ -47,23 +49,24 @@ func (p *SSEParser) Parse(
 			default:
 			}
 
-			line, err := reader.ReadString('\n')
-			if err != nil {
-				if err == io.EOF {
-					if line != "" {
-						p.processLine(line, &currentEvent, &dataLines)
-					}
-					if len(dataLines) > 0 {
-						if p.handleEvent(ctx, out, currentEvent, dataLines, extractor) {
-							return
-						}
+			if !scanner.Scan() {
+				if err := scanner.Err(); err != nil {
+					if errors.Is(err, bufio.ErrTooLong) {
+						sendStreamChunk(out, ctx, StreamChunk{Error: fmt.Errorf("sse: line too long")})
+					} else {
+						sendStreamChunk(out, ctx, StreamChunk{Error: err})
 					}
 					return
 				}
-				sendStreamChunk(out, ctx, StreamChunk{Error: err})
+				if len(dataLines) > 0 {
+					if p.handleEvent(ctx, out, currentEvent, dataLines, extractor) {
+						return
+					}
+				}
 				return
 			}
 
+			line := scanner.Text()
 			if p.processLine(line, &currentEvent, &dataLines) {
 				if len(dataLines) > 0 {
 					if p.handleEvent(ctx, out, currentEvent, dataLines, extractor) {
