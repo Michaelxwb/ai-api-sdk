@@ -25,8 +25,17 @@ providers:
   # Local vLLM (OpenAI-compatible)
   - name: "vllm_local"
     type: "openai_compat"
-    base_url: "https://integrate.api.nvidia.com/v1"
+    base_url: "https://api.5090523.xyz/v1"
     auth_ref: "vllm_bearer"
+
+  - name: "dashscope"
+    type: "dashscope"
+    auth_ref: "dashscope_key"
+
+  # 火山引擎方舟 (Volcengine Ark)
+  - name: "volcengine"
+    type: "volcengine"
+    auth_ref: "volcengine_key"
 
   # OpenAI cloud
   - name: "openai_cloud"
@@ -82,12 +91,17 @@ credentials:
   - id: "vllm_bearer"
     provider: "openai_compat"
     auth_type: "bearer_token"
-    access_token: "SK-TOKEN-JJ"
+    access_token: "sk-YOUR-TOKEN-HERE"
+
+  - id: "dashscope_key"
+    provider: "dashscope"
+    auth_type: "bearer_token"
+    access_token: "sk-10ed349b0ea34sdss"
 
   - id: "openai_key"
     provider: "openai"
     auth_type: "bearer_token"
-    access_token: "sk-REPLACE"
+    access_token: "sddssds"
 
   - id: "claude_key"
     provider: "claude"
@@ -108,6 +122,11 @@ credentials:
     provider: "deepseek"
     auth_type: "bearer_token"
     access_token: "sk-REPLACE"
+
+  - id: "volcengine_key"
+    provider: "volcengine"
+    auth_type: "bearer_token"
+    access_token: "your-ark-api-key"
 
   - id: "dify_key"
     provider: "dify"
