@@ -4,25 +4,34 @@
 
 ---
 
-## Record Work Progress (Simplified - Only 2 Steps)
+## Record Work Progress
 
-### Step 1: Get Context
+### Step 1: Get Context & Check Tasks
 
 ```bash
-./.trellis/scripts/get-context.sh
+python3 ./.trellis/scripts/get_context.py --mode record
+```
+
+[!] Archive tasks whose work is **actually done** — judge by work status, not the `status` field in task.json:
+- Code committed? → Archive it (don't wait for PR)
+- All acceptance criteria met? → Archive it
+- Don't skip archiving just because `status` still says `planning` or `in_progress`
+
+```bash
+python3 ./.trellis/scripts/task.py archive <task-name>
 ```
 
 ### Step 2: One-Click Add Session
 
 ```bash
 # Method 1: Simple parameters
-./.trellis/scripts/add-session.sh \
+python3 ./.trellis/scripts/add_session.py \
   --title "Session Title" \
   --commit "hash1,hash2" \
   --summary "Brief summary of what was done"
 
 # Method 2: Pass detailed content via stdin
-cat << 'EOF' | ./.trellis/scripts/add-session.sh --title "Title" --commit "hash"
+cat << 'EOF' | python3 ./.trellis/scripts/add_session.py --title "Title" --commit "hash"
 | Feature | Description |
 |---------|-------------|
 | New API | Added user authentication endpoint |
@@ -38,16 +47,7 @@ EOF
 - [OK] Appends session to journal-N.md
 - [OK] Auto-detects line count, creates new file if >2000 lines
 - [OK] Updates index.md (Total Sessions +1, Last Active, line stats, history)
-
----
-
-## Archive Completed Task (if any)
-
-If a task was completed this session:
-
-```bash
-./.trellis/scripts/task.sh archive <task-name>
-```
+- [OK] Auto-commits .trellis/workspace and .trellis/tasks changes
 
 ---
 
@@ -55,8 +55,7 @@ If a task was completed this session:
 
 | Command | Purpose |
 |---------|---------|
-| `get-context.sh` | Get all context info |
-| `add-session.sh --title "..." --commit "..."` | **One-click add session (recommended)** |
-| `task.sh create "<title>" [--slug <name>]` | Create new task directory |
-| `task.sh archive <name>` | Archive completed task |
-| `task.sh list` | List active tasks |
+| `python3 ./.trellis/scripts/get_context.py --mode record` | Get context for record-session |
+| `python3 ./.trellis/scripts/add_session.py --title "..." --commit "..."` | **One-click add session (recommended)** |
+| `python3 ./.trellis/scripts/task.py archive <name>` | Archive completed task (auto-commits) |
+| `python3 ./.trellis/scripts/task.py list` | List active tasks |

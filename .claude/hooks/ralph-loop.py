@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
 Ralph Loop - SubagentStop Hook for Check Agent Loop Control
 
@@ -16,6 +17,11 @@ State file: .trellis/.ralph-state.json
 - Tracks current iteration count per session
 - Resets when task changes
 """
+from __future__ import annotations
+
+# IMPORTANT: Suppress all warnings FIRST
+import warnings
+warnings.filterwarnings("ignore")
 
 import json
 import os
@@ -23,6 +29,15 @@ import subprocess
 import sys
 from datetime import datetime
 from pathlib import Path
+
+# IMPORTANT: Force stdout to use UTF-8 on Windows
+# This fixes UnicodeEncodeError when outputting non-ASCII characters
+if sys.platform == "win32":
+    import io as _io
+    if hasattr(sys.stdout, "reconfigure"):
+        sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
+    elif hasattr(sys.stdout, "detach"):
+        sys.stdout = _io.TextIOWrapper(sys.stdout.detach(), encoding="utf-8", errors="replace")  # type: ignore[union-attr]
 
 # =============================================================================
 # Configuration

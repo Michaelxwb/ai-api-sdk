@@ -35,7 +35,7 @@ cat .trellis/workflow.md  # Development process, conventions, and quick start gu
 ### Step 2: Get Current Status `[AI]`
 
 ```bash
-./.trellis/scripts/get-context.sh
+python3 ./.trellis/scripts/get_context.py
 ```
 
 ### Step 3: Read Project Guidelines `[AI]`
@@ -68,7 +68,7 @@ Use when:
 - Unclear scope that needs research
 
 ```bash
-./.trellis/scripts/multi-agent/plan.sh \
+python3 ./.trellis/scripts/multi_agent/plan.py \
   --name "<feature-name>" \
   --type "<backend|frontend|fullstack>" \
   --requirement "<user requirement description>"
@@ -81,10 +81,10 @@ Plan Agent will:
 4. Write prd.md with acceptance criteria
 5. Output ready-to-use task directory
 
-After plan.sh completes, start the worktree agent:
+After plan.py completes, start the worktree agent:
 
 ```bash
-./.trellis/scripts/multi-agent/trellis:start.sh "$TASK_DIR"
+python3 ./.trellis/scripts/multi_agent/start.py "$TASK_DIR"
 ```
 
 ### Option B: Manual Configuration (For simple/clear features) `[AI]`
@@ -98,25 +98,25 @@ Use when:
 
 ```bash
 # title is task description, --slug for task directory name
-TASK_DIR=$(./.trellis/scripts/task.sh create "<title>" --slug <task-name>)
+TASK_DIR=$(python3 ./.trellis/scripts/task.py create "<title>" --slug <task-name>)
 ```
 
 #### Step 2: Configure Task
 
 ```bash
 # Initialize jsonl context files
-./.trellis/scripts/task.sh init-context "$TASK_DIR" <dev_type>
+python3 ./.trellis/scripts/task.py init-context "$TASK_DIR" <dev_type>
 
 # Set branch and scope
-./.trellis/scripts/task.sh set-branch "$TASK_DIR" feature/<name>
-./.trellis/scripts/task.sh set-scope "$TASK_DIR" <scope>
+python3 ./.trellis/scripts/task.py set-branch "$TASK_DIR" feature/<name>
+python3 ./.trellis/scripts/task.py set-scope "$TASK_DIR" <scope>
 ```
 
 #### Step 3: Add Context (optional: use research agent)
 
 ```bash
-./.trellis/scripts/task.sh add-context "$TASK_DIR" implement "<path>" "<reason>"
-./.trellis/scripts/task.sh add-context "$TASK_DIR" check "<path>" "<reason>"
+python3 ./.trellis/scripts/task.py add-context "$TASK_DIR" implement "<path>" "<reason>"
+python3 ./.trellis/scripts/task.py add-context "$TASK_DIR" check "<path>" "<reason>"
 ```
 
 #### Step 4: Create prd.md
@@ -136,8 +136,8 @@ EOF
 #### Step 5: Validate and Start
 
 ```bash
-./.trellis/scripts/task.sh validate "$TASK_DIR"
-./.trellis/scripts/multi-agent/trellis:start.sh "$TASK_DIR"
+python3 ./.trellis/scripts/task.py validate "$TASK_DIR"
+python3 ./.trellis/scripts/multi_agent/start.py "$TASK_DIR"
 ```
 
 ---
@@ -166,10 +166,10 @@ The following slash commands are for users (not AI):
 Tell the user they can use these commands to monitor:
 
 ```bash
-./.trellis/scripts/multi-agent/status.sh                    # Overview
-./.trellis/scripts/multi-agent/status.sh --log <name>       # View log
-./.trellis/scripts/multi-agent/status.sh --watch <name>     # Real-time monitoring
-./.trellis/scripts/multi-agent/cleanup.sh <branch>          # Cleanup worktree
+python3 ./.trellis/scripts/multi_agent/status.py                    # Overview
+python3 ./.trellis/scripts/multi_agent/status.py --log <name>       # View log
+python3 ./.trellis/scripts/multi_agent/status.py --watch <name>     # Real-time monitoring
+python3 ./.trellis/scripts/multi_agent/cleanup.py <branch>          # Cleanup worktree
 ```
 
 ---
