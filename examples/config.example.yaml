@@ -25,7 +25,7 @@ providers:
   # Local vLLM (OpenAI-compatible)
   - name: "vllm_local"
     type: "openai_compat"
-    base_url: "https://api.5090523.xyz/v1"
+    base_url: "http://10.6.193.48:30090/v1"
     auth_ref: "vllm_bearer"
 
   - name: "dashscope"
@@ -76,7 +76,7 @@ providers:
   # Optional Dify
   - name: "dify"
     type: "dify"
-    base_url: "https://api.dify.ai/v1"  # 或自建 Dify 地址
+    base_url: "https://adaidify.sangfor.com/v1"  # 或自建 Dify 地址
     auth_ref: "dify_key"
     # extra_body:  # 可选：注入变量
     #   inputs:
@@ -91,7 +91,7 @@ credentials:
   - id: "vllm_bearer"
     provider: "openai_compat"
     auth_type: "bearer_token"
-    access_token: "sk-YOUR-TOKEN-HERE"
+    access_token: "sk-TOKEN"
 
   - id: "dashscope_key"
     provider: "dashscope"
@@ -131,4 +131,4 @@ credentials:
   - id: "dify_key"
     provider: "dify"
     auth_type: "api_key"
-    api_key: "app-lwrLMC2HKTjz1jDLq2T02i4l"
+    api_key: "app-59zRGqk6BMwGkKz3HWLIezvi"

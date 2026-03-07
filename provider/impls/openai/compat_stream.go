@@ -24,6 +24,7 @@ func (s *OpenAICompatSpec) ParseStreamResponse(resp *http.Response) (<-chan stre
 		openaiStreamConfig.DeltaPaths[0],
 		openaiStreamConfig.DonePath,
 		openaiStreamConfig.DoneValue,
+		"",
 	)
 	return parser.Parse(streaming.StreamContext(resp), resp, extractor)
 }

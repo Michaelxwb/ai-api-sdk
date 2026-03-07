@@ -9,6 +9,7 @@ import (
 	"github.com/Michaelxwb/ai-api-sdk/auth"
 	"github.com/Michaelxwb/ai-api-sdk/config"
 	"github.com/Michaelxwb/ai-api-sdk/provider/base"
+	"github.com/Michaelxwb/ai-api-sdk/provider/impls/generic"
 	"github.com/Michaelxwb/ai-api-sdk/session"
 )
 
@@ -106,4 +107,55 @@ func (c *Client) chatWith(ctx context.Context, cred *auth.Credential, pc *config
 		return base.ChatResponse{}, &APIError{StatusCode: resp.StatusCode, Body: bodyStr, Op: "chat"}
 	}
 	return prep.spec.ParseResponse(resp)
+}
+
+// NewSessionFromHTTPSpec 从业务层五字段原始 HTTP 报文格式创建会话。
+// 相较于 NewSessionFromRaw，调用方无需了解 SDK 内部的 RawIntegrationSpec 结构，
+// 只需传入从浏览器/抓包工具获取的原始请求和响应文本即可。
+func (c *Client) NewSessionFromHTTPSpec(spec generic.RawHTTPSpec, opts ...SessionOption) (*Session, error) {
+	raw, err := generic.ParseHTTPSpec(spec)
+	if err != nil {
+		return nil, err
+	}
+	return c.NewSessionFromRaw(raw, opts...)
+}
+
+// NewSessionFromRaw creates a session from a raw integration spec for non-standard API providers.
+// It compiles the spec into a GenericProfile, extracts credentials, and configures conversation mode.
+func (c *Client) NewSessionFromRaw(raw generic.RawIntegrationSpec, opts ...SessionOption) (*Session, error) {
+	compiled, err := generic.ParseRawIntegration(raw)
+	if err != nil {
+		return nil, err
+	}
+
+	// Register a per-instance GenericSpec with the compiled profile
+	spec := generic.NewGenericSpec(compiled.Profile)
+
+	// Create a unique spec name to avoid collisions
+	specName := "generic"
+	if raw.Name != "" {
+		specName = "generic_" + raw.Name
+	}
+	base.Register(specName, spec)
+
+	pc := &config.ProviderConfig{
+		Name:    specName,
+		Type:    specName,
+		BaseURL: compiled.BaseURL,
+		Headers: compiled.ExtraHeaders,
+	}
+
+	// Determine conversation mode
+	var convMode ConversationMode
+	switch compiled.Profile.Conversation.Mode {
+	case "remote_session":
+		convMode = ConversationModeRemoteSession
+	case "local_history":
+		convMode = ConversationModeLocalHistory
+	}
+
+	sess := c.NewSessionWith(compiled.Credential, pc, opts...)
+	sess.conversationMode = convMode
+
+	return sess, nil
 }

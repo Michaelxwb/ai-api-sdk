@@ -1,0 +1,5 @@
+{"file": ".trellis/workflow.md", "reason": "Project workflow and conventions"}
+{"file": ".trellis/spec/backend/index.md", "reason": "Backend development guide"}
+{"file": "docs/internal/design-generic-adapter-integration.md", "reason": "V2.5 设计方案：ConversationMode、GenericProfile、RawIntegrationSpec、ExtractCredential、HistoryWindow、OnErrorStrategy 全部数据结构与执行逻辑"}
+{"file": ".trellis/spec/backend/error-handling.md", "reason": "错误前缀约定与处理模式"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "禁止模式与必需模式"}

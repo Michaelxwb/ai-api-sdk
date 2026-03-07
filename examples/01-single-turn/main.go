@@ -19,8 +19,8 @@ import (
 
 const (
 	providerName = "vllm_local"
-	modelName    = "claude-sonnet-4-5-20250929"
-	promptText   = "什么是Rust语言？"
+	modelName    = "Qwen3-32B-FP8"
+	promptText   = "请用简短的100字告诉我什么是Rust语言？"
 	streamOutput = true
 )
 
@@ -31,14 +31,14 @@ func main() {
 	}
 	ctx := context.Background()
 
-	fmt.Println("=== 单轮对话示例 ===\n")
+	fmt.Println("=== 单轮对话示例 ===")
 
 	// ========================================
 	// 场景1：无SessionStore（最简单）
 	// ========================================
 	//fmt.Println("场景1：=========================无SessionStore=========================")
-	example1_NoStore(cli, ctx)
-	time.Sleep(10 * time.Second)
+	//example1_NoStore(cli, ctx)
+	//time.Sleep(10 * time.Second)
 
 	// ========================================
 	// 场景2：Memory SessionStore（内存审计）
@@ -50,9 +50,9 @@ func main() {
 	// ========================================
 	// 场景3：File SessionStore
 	// ========================================
-	//fmt.Println("\n场景3：=========================File SessionStore=========================")
-	//example3_FileStore(cli, ctx)
-	//time.Sleep(10 * time.Second)
+	fmt.Println("\n场景3：=========================File SessionStore=========================")
+	example3_FileStore(cli, ctx)
+	time.Sleep(10 * time.Second)
 
 	// ========================================
 	// 场景4：SQLite SessionStore
@@ -89,7 +89,7 @@ func example1_NoStore(cli *client.Client, ctx context.Context) {
 	)
 
 	if streamOutput {
-		fmt.Print("回答: ")
+		fmt.Print("回答: \n")
 	}
 	text, err := chat(ctx, sess, base.ChatRequest{
 		Model: modelName,
@@ -111,7 +111,7 @@ func example1_NoStore(cli *client.Client, ctx context.Context) {
 
 	// 再来一次单轮对话，仍保持隔离（不依赖上一轮）
 	if streamOutput {
-		fmt.Print("第二次回答: ")
+		fmt.Print("第二次回答: \n")
 	}
 	text2, err := chat(ctx, sess, base.ChatRequest{
 		Model: modelName,
@@ -141,7 +141,7 @@ func example2_MemoryStore(cli *client.Client, ctx context.Context) {
 	)
 
 	if streamOutput {
-		fmt.Print("回答: ")
+		fmt.Print("回答: \n")
 	}
 	text, err := chat(ctx, sess, base.ChatRequest{
 		Model: modelName,
@@ -180,7 +180,7 @@ func example3_FileStore(cli *client.Client, ctx context.Context) {
 	)
 
 	if streamOutput {
-		fmt.Print("回答: ")
+		fmt.Print("回答: \n")
 	}
 	text, err := chat(ctx, sess, base.ChatRequest{
 		Model: modelName,

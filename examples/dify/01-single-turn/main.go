@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/Michaelxwb/ai-api-sdk/auth"
 	"github.com/Michaelxwb/ai-api-sdk/client"
@@ -18,7 +21,7 @@ import (
 
 const (
 	providerName      = "dify"
-	promptText        = "什么是Go语言？"
+	promptText        = "用20个字简单回答什么是Go语言？"
 	streamOutput bool = true
 )
 
@@ -27,10 +30,16 @@ func main() {
 	if err := loadLocalConfig(cli); err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
+	cli.HTTP = &http.Client{
+		Timeout: 120 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+		},
+	}
 	ctx := context.Background()
 
-	fmt.Println("=== Dify 单轮对话示例 ===\n")
-	fmt.Println("说明：Dify 的 conversation_id 由服务端生成，SDK 会自动提取并保存。\n")
+	fmt.Println("=== Dify 单轮对话示例 ===")
+	fmt.Println("说明：Dify 的 conversation_id 由服务端生成，SDK 会自动提取并保存。")
 
 	// ========================================
 	// 场景1：无SessionStore（最简单）
@@ -41,20 +50,20 @@ func main() {
 	// ========================================
 	// 场景2：Memory SessionStore（内存审计）
 	// ========================================
-	fmt.Println("\n场景2：=========================Memory SessionStore=========================")
-	example2_MemoryStore(cli, ctx)
+	//fmt.Println("\n场景2：=========================Memory SessionStore=========================")
+	//example2_MemoryStore(cli, ctx)
 
 	// ========================================
 	// 场景3：File SessionStore
 	// ========================================
-	fmt.Println("\n场景3：=========================File SessionStore=========================")
-	example3_FileStore(cli, ctx)
+	//fmt.Println("\n场景3：=========================File SessionStore=========================")
+	//example3_FileStore(cli, ctx)
 
 	// ========================================
 	// 场景4：SQLite SessionStore
 	// ========================================
-	fmt.Println("\n场景4：=========================SQLite SessionStore=========================")
-	example4_SQLiteStore(cli, ctx)
+	//fmt.Println("\n场景4：=========================SQLite SessionStore=========================")
+	//example4_SQLiteStore(cli, ctx)
 
 	// ========================================
 	// 场景5：MySQL SessionStore（需要配置）

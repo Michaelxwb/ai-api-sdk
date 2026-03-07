@@ -2,8 +2,11 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
+	"net/http"
+	"time"
 
 	"github.com/Michaelxwb/ai-api-sdk/auth"
 	"github.com/Michaelxwb/ai-api-sdk/client"
@@ -21,10 +24,16 @@ const (
 
 func main() {
 	cli := client.New()
+	cli.HTTP = &http.Client{
+		Timeout: 120 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+		},
+	}
 	ctx := context.Background()
 
-	fmt.Println("=== Dify 平台集成示例（NewSessionWith） ===\n")
-	fmt.Println("说明：Dify 的 conversation_id 由服务端生成，SDK 会自动提取并保存。\n")
+	fmt.Println("=== Dify 平台集成示例（NewSessionWith） ===")
+	fmt.Println("说明：Dify 的 conversation_id 由服务端生成，SDK 会自动提取并保存。")
 
 	// 构造凭证（模拟平台从数据库获取）
 	cred := &auth.Credential{

@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	"github.com/Michaelxwb/ai-api-sdk/auth"
 	"github.com/Michaelxwb/ai-api-sdk/client"
@@ -28,10 +31,16 @@ func main() {
 	if err := loadLocalConfig(cli); err != nil {
 		log.Fatalf("Failed to load config: %v", err)
 	}
+	cli.HTTP = &http.Client{
+		Timeout: 120 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+		},
+	}
 	ctx := context.Background()
 
-	fmt.Println("=== Dify 多轮对话示例 ===\n")
-	fmt.Println("说明：Dify 的 conversation_id 由服务端生成，SDK 会自动提取并复用。\n")
+	fmt.Println("=== Dify 多轮对话示例 ===")
+	fmt.Println("说明：Dify 的 conversation_id 由服务端生成，SDK 会自动提取并复用。")
 
 	// ========================================
 	// 场景1：无SessionStore（手动传递历史）
@@ -80,6 +89,7 @@ func example1_NoStore(cli *client.Client, ctx context.Context) {
 	sess := cli.NewSession(
 		providerName,
 		client.WithHistoryMode(client.HistoryAuto),
+		client.WithConversationMode(client.ConversationModeRemoteSession),
 	)
 
 	if streamOutput {
@@ -128,6 +138,7 @@ func example2_MemoryStore(cli *client.Client, ctx context.Context) {
 		providerName,
 		client.WithStore(store),
 		client.WithHistoryMode(client.HistoryAuto), // 多轮：自动加载历史
+		client.WithConversationMode(client.ConversationModeRemoteSession),
 	)
 
 	if streamOutput {
@@ -176,6 +187,7 @@ func example3_FileStore(cli *client.Client, ctx context.Context) {
 		providerName,
 		client.WithStore(store),
 		client.WithHistoryMode(client.HistoryAuto),
+		client.WithConversationMode(client.ConversationModeRemoteSession),
 	)
 
 	if streamOutput {
@@ -229,6 +241,7 @@ func example4_SQLiteStore(cli *client.Client, ctx context.Context) {
 		providerName,
 		client.WithStore(store),
 		client.WithHistoryMode(client.HistoryAuto),
+		client.WithConversationMode(client.ConversationModeRemoteSession),
 	)
 
 	if streamOutput {

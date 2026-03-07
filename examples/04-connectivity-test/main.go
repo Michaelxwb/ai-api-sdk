@@ -17,14 +17,14 @@ import (
 
 const (
 	providerName = "vllm_local"
-	modelName    = "minimaxai/minimax-m2.1"
+	modelName    = "Qwen3-32B-FP8"
 )
 
 func main() {
 	cli := client.New()
 	ctx := context.Background()
 
-	fmt.Println("=== 连通性测试示例 ===\n")
+	fmt.Println("=== 连通性测试示例 ===")
 
 	// ========================================
 	// 场景1：Test() - 本地配置模式
@@ -64,13 +64,13 @@ func testPlatformIntegration(cli *client.Client, ctx context.Context) {
 		ID:       "test-cred",
 		Provider: "openai_compat",
 		AuthType: auth.AuthTypeAPIKey,
-		APIKey:   "SK-TOKEN-JJ",
+		APIKey:   "sk-TOKEN",
 	}
 
 	pc := &config.ProviderConfig{
 		Name:    "vllm_local",
 		Type:    "openai_compat",
-		BaseURL: "https://integrate.api.nvidia.com/v1",
+		BaseURL: "http://10.6.193.48:30090/v1",
 	}
 
 	result, err := cli.TestWith(ctx, cred, pc, &client.TestOptions{

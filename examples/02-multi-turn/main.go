@@ -19,7 +19,7 @@ import (
 
 const (
 	providerName = "vllm_local"
-	modelName    = "claude-sonnet-4-5-20250929"
+	modelName    = "Qwen3-32B-FP8"
 	firstPrompt  = "请记住：我最喜欢的编程语言是 Python。"
 	secondPrompt = "我最喜欢的编程语言是什么？"
 	streamOutput = true
@@ -32,7 +32,7 @@ func main() {
 	}
 	ctx := context.Background()
 
-	fmt.Println("=== 多轮对话示例 ===\n")
+	fmt.Println("=== 多轮对话示例 ===")
 
 	// ========================================
 	// 场景1：无SessionStore（手动传递历史）
@@ -51,16 +51,16 @@ func main() {
 	// ========================================
 	// 场景3：File SessionStore
 	// ========================================
-	fmt.Println("\n场景3：=========================File SessionStore=========================")
-	example3_FileStore(cli, ctx)
-	time.Sleep(10 * time.Second)
+	//fmt.Println("\n场景3：=========================File SessionStore=========================")
+	//example3_FileStore(cli, ctx)
+	//time.Sleep(10 * time.Second)
 
 	// ========================================
 	// 场景4：SQLite SessionStore
 	// ========================================
-	fmt.Println("\n场景4：=========================SQLite SessionStore=========================")
-	example4_SQLiteStore(cli, ctx)
-	time.Sleep(10 * time.Second)
+	//fmt.Println("\n场景4：=========================SQLite SessionStore=========================")
+	//example4_SQLiteStore(cli, ctx)
+	//time.Sleep(10 * time.Second)
 
 	// ========================================
 	// 场景5：MySQL SessionStore（需要配置）
@@ -87,10 +87,11 @@ func example1_NoStore(cli *client.Client, ctx context.Context) {
 	sess := cli.NewSession(
 		providerName,
 		client.WithHistoryMode(client.HistoryAuto),
+		client.WithConversationMode(client.ConversationModeLocalHistory),
 	)
 
 	if streamOutput {
-		fmt.Print("第一次回答: ")
+		fmt.Print("第一次回答: \n")
 	}
 	text1, err := chat(ctx, sess, base.ChatRequest{
 		Model: modelName,
@@ -116,7 +117,7 @@ func example1_NoStore(cli *client.Client, ctx context.Context) {
 	}
 
 	if streamOutput {
-		fmt.Print("第二次回答: ")
+		fmt.Print("第二次回答: \n")
 	}
 	text2, err := chat(ctx, sess, base.ChatRequest{
 		Model:        modelName,
@@ -139,6 +140,7 @@ func example2_MemoryStore(cli *client.Client, ctx context.Context) {
 		providerName,
 		client.WithStore(store),
 		client.WithHistoryMode(client.HistoryAuto), // 多轮：自动加载历史
+		client.WithConversationMode(client.ConversationModeLocalHistory),
 		client.WithAutoID(),
 	)
 
@@ -191,6 +193,7 @@ func example3_FileStore(cli *client.Client, ctx context.Context) {
 		providerName,
 		client.WithStore(store),
 		client.WithHistoryMode(client.HistoryAuto),
+		client.WithConversationMode(client.ConversationModeLocalHistory),
 		client.WithAutoID(),
 	)
 
@@ -248,11 +251,12 @@ func example4_SQLiteStore(cli *client.Client, ctx context.Context) {
 		providerName,
 		client.WithStore(store),
 		client.WithHistoryMode(client.HistoryAuto),
+		client.WithConversationMode(client.ConversationModeLocalHistory),
 		client.WithAutoID(),
 	)
 
 	if streamOutput {
-		fmt.Print("第一次回答: ")
+		fmt.Print("第一次回答: \n")
 	}
 	text1, err := chat(ctx, sess, base.ChatRequest{
 		Model: modelName,

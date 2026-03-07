@@ -25,6 +25,7 @@ func (s *OllamaSpec) ParseStreamResponse(resp *http.Response) (<-chan streaming.
 		ollamaStreamConfig.DeltaPaths[0],
 		ollamaStreamConfig.DonePath,
 		ollamaStreamConfig.DoneValue,
+		"",
 	)
 	return parser.Parse(streaming.StreamContext(resp), resp, extractor)
 }

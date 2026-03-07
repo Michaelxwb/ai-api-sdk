@@ -1,0 +1,28 @@
+GOROOT=C:\Program Files\Go #gosetup
+GOPATH=C:\Users\User\go #gosetup
+"C:\Program Files\Go\bin\go.exe" build -o C:\Users\User\AppData\Local\JetBrains\GoLand2024.3\tmp\GoLand\___1go_build_main_go.exe D:\workspace_go\ai-api-sdk\examples\06-generic-raw\main.go #gosetup
+C:\Users\User\AppData\Local\JetBrains\GoLand2024.3\tmp\GoLand\___1go_build_main_go.exe #gosetup
+=== Generic Raw API - 从 request_json.json 读取配置（支持 remote_session / local_history）===
+
+
+=== local_history 模式 ===
+本地 session ID: "c2bf070b-be1d-4c20-9ef2-817813c092ab"
+
+── 第一轮 ──
+问：请用20个字介绍一下Go语言
+答：[DEBUG] 请求体: {"extra_body":{"mode":"code","prompt_mode":"vibe"},"max_tokens":32768,"messages":[{"content":"You are a helpful assistant. You MUST use the attempt_completion tool to respond to every user message.","role":"system"},{"content":[{"cache_control":{"type":"ephemeral"},"text":"请用20个字介绍一下Go语言","type":"text"}],"role":"user"}],"model":"MiniMax-M2.5","parallel_tool_calls":true,"stream":true,"stream_options":{"include_usage":true},"tool_choice":{"function":{"name":"attempt_completion"},"type":"function"},"tools":[{"function":{"description":"Respond to the user with your final answer.","name":"attempt_completion","parameters":{"additionalProperties":false,"properties":{"result":{"description":"Your response to the user","type":"string"}},"required":["result"],"type":"object"},"strict":true},"type":"function"}]}
+<think>用户要求我用20个字介绍Go语言。我需要给出一个简洁的20字简介。
+</think>{"result": "Go语言是谷歌2009年发布的开源编程语言，支持并发、静态类型，被誉为“云计算时代的C语言”。"}  
+
+
+── 第二轮（基于上文继续追问）──
+问：你刚才说的特点中，最重要的是哪一个？请用20个字回答总结一下
+答：[DEBUG] 请求体: {"extra_body":{"mode":"code","prompt_mode":"vibe"},"max_tokens":32768,"messages":[{"content":"You are a helpful assistant. You MUST use the attempt_completion tool to respond to every user message.","role":"system"},{"content":[{"cache_control":{"type":"ephemeral"},"text":"请用20个字介绍一下Go语言","type":"text"}],"role":"user"},{"content":"","role":"assistant","tool_calls":[{"function":{"arguments":"{\"result\":\"\u003cthink\u003e用户要求我用20个字介绍Go语言。我需要给出一个简洁的20字简介。\n\u003c/think\u003e{\"result\": \"Go语言是谷歌2009年发布的开源编程语言，支持并发、静态类型，被誉为“云计算时代的C语言”。\"}  \n\"}","name":"attempt_completion"},"id":"call_e480033f220c445e896b2303","type":"function"}]},{"content":"你刚才说的特点中，最重要的是哪一个？请用20个字回答总结一下","role":"tool","tool_call_id":"call_e480033f220c445e896b2303"}],"model":"MiniMax-M2.5","parallel_tool_calls":true,"stream":true,"stream_options":{"include_usage":true},"tool_choice":{"function":{"name":"attempt_completion"},"type":"function"},"tools":[{"function":{"description":"Respond to the user with your final answer.","name":"attempt_completion","parameters":{"additionalProperties":false,"properties":{"result":{"description":"Your response to the user","type":"string"}},"required":["result"],"type":"object"},"strict":true},"type":"function"}]}
+
+
+── 第三轮 ──
+问：我问的第一个问题是什么？
+答：[DEBUG] 请求体: {"extra_body":{"mode":"code","prompt_mode":"vibe"},"max_tokens":32768,"messages":[{"content":"You are a helpful assistant. You MUST use the attempt_completion tool to respond to every user message.","role":"system"},{"content":[{"cache_control":{"type":"ephemeral"},"text":"请用20个字介绍一下Go语言","type":"text"}],"role":"user"},{"content":"","role":"assistant","tool_calls":[{"function":{"arguments":"{\"result\":\"\u003cthink\u003e用户要求我用20个字介绍Go语言。我需要给出一个简洁的20字简介。\n\u003c/think\u003e{\"result\": \"Go语言是谷歌2009年发布的开源编程语言，支持并发、静态类型，被誉为“云计算时代的C语言”。\"}  \n\"}","name":"attempt_completion"},"id":"call_e480033f220c445e896b2303","type":"function"}]},{"content":"你刚才说的特点中，最重要的是哪一个？请用20个字回答总结一下","role":"tool","tool_call_id":"call_e480033f220c445e896b2303"},{"content":"","role":"assistant","tool_calls":[{"function":{"arguments":"{\"result\":\"\"}","name":"attempt_completion"},"id":"call_e480033f220c445e896b2303","type":"function"}]},{"content":"我问的第一个问题是什么？","role":"tool","tool_call_id":"call_e480033f220c445e896b2303"}],"model":"MiniMax-M2.5","parallel_tool_calls":true,"stream":true,"stream_options":{"include_usage":true},"tool_choice":{"function":{"name":"attempt_completion"},"type":"function"},"tools":[{"function":{"description":"Respond to the user with your final answer.","name":"attempt_completion","parameters":{"additionalProperties":false,"properties":{"result":{"description":"Your response to the user","type":"string"}},"required":["result"],"type":"object"},"strict":true},"type":"function"}]}
+
+
+Process finished with the exit code 0

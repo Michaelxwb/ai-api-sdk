@@ -2,8 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"log"
+	"net/http"
 	"os"
 	"path/filepath"
 	"time"
@@ -22,9 +24,15 @@ const (
 
 func main() {
 	cli := client.New()
+	cli.HTTP = &http.Client{
+		Timeout: 120 * time.Second,
+		Transport: &http.Transport{
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: true}, //nolint:gosec
+		},
+	}
 	ctx := context.Background()
 
-	fmt.Println("=== Dify 连通性测试示例 ===\n")
+	fmt.Println("=== Dify 连通性测试示例 ===")
 
 	// ========================================
 	// 场景1：Test() - 本地配置模式

@@ -15,8 +15,8 @@ import (
 )
 
 const (
-	modelName    = "claude-sonnet-4-5-20250929"
-	promptText   = "什么是Go语言？"
+	modelName    = "Qwen3-32B-FP8"
+	promptText   = "请用简短的100字，什么是Go语言？"
 	streamOutput = true
 )
 
@@ -24,20 +24,20 @@ func main() {
 	cli := client.New()
 	ctx := context.Background()
 
-	fmt.Println("=== 平台集成示例（NewSessionWith） ===\n")
+	fmt.Println("=== 平台集成示例（NewSessionWith） ===")
 
 	// 构造凭证（模拟平台从数据库获取）
 	cred := &auth.Credential{
 		ID:       "user-123-openai",
 		Provider: "openai_compat",
 		AuthType: auth.AuthTypeBearerToken,
-		APIKey:   "SK-TOKEN-JJ",
+		APIKey:   "sk-TOKEN",
 	}
 
 	pc := &config.ProviderConfig{
 		Name:    "vllm_local",
 		Type:    "openai_compat",
-		BaseURL: "https://integrate.api.nvidia.com/v1",
+		BaseURL: "http://10.6.193.48:30090/v1",
 	}
 
 	// ========================================
@@ -49,20 +49,20 @@ func main() {
 	// ========================================
 	// 场景2：Memory SessionStore（内存审计）
 	// ========================================
-	fmt.Println("\n场景2：=========================Memory SessionStore=========================")
-	example2_MemoryStore(cli, ctx, cred, pc)
+	//fmt.Println("\n场景2：=========================Memory SessionStore=========================")
+	//example2_MemoryStore(cli, ctx, cred, pc)
 
 	// ========================================
 	// 场景3：File SessionStore
 	// ========================================
-	fmt.Println("\n场景3：=========================File SessionStore=========================")
-	example3_FileStore(cli, ctx, cred, pc)
+	//fmt.Println("\n场景3：=========================File SessionStore=========================")
+	//example3_FileStore(cli, ctx, cred, pc)
 
 	// ========================================
 	// 场景4：SQLite SessionStore
 	// ========================================
-	fmt.Println("\n场景4：=========================SQLite SessionStore=========================")
-	example4_SQLiteStore(cli, ctx, cred, pc)
+	//fmt.Println("\n场景4：=========================SQLite SessionStore=========================")
+	//example4_SQLiteStore(cli, ctx, cred, pc)
 
 	// ========================================
 	// 场景5：MySQL SessionStore（需要配置）
