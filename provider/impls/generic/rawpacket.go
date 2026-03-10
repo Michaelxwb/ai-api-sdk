@@ -29,6 +29,23 @@ type RawHTTPSpec struct {
 	ChainFields []ChainField `json:"chain_fields"`
 }
 
+// RawHTTPMultiRoundSpec 是业务层提供的多轮抓包原文格式。
+// SDK 内部会将每轮 request/response 原文自动转换为 MultiRoundSpec 以进行推理。
+type RawHTTPMultiRoundSpec struct {
+	// Model 是会话模式：remote_session（服务端维护会话）或 local_history（本地维护历史）
+	Model string `json:"model"`
+	// BaseURL 是目标接口完整 URL（含 scheme + host + path）
+	BaseURL string `json:"base_url"`
+	// Rounds 需提供 2~5 轮完整请求/响应原文。
+	Rounds []RawHTTPRound `json:"rounds"`
+}
+
+// RawHTTPRound 是一轮抓包原文（request/response）。
+type RawHTTPRound struct {
+	Request  string `json:"request"`
+	Response string `json:"response"`
+}
+
 // ParseHTTPSpec 将业务层五字段格式解析为 RawIntegrationSpec，
 // 可直接传入 ParseRawIntegration 进一步编译为 GenericProfile。
 func ParseHTTPSpec(spec RawHTTPSpec) (RawIntegrationSpec, error) {
@@ -58,6 +75,131 @@ func ParseHTTPSpec(spec RawHTTPSpec) (RawIntegrationSpec, error) {
 		Conversation: ConversationProfile{Mode: spec.Model},
 		ChainFields:  spec.ChainFields,
 	}, nil
+}
+
+// ParseHTTPMultiRoundSpec 将业务层抓包多轮原文转换为推理层 MultiRoundSpec。
+// 请求体会被规范化为紧凑 JSON 字符串，响应体会提取为可被推理器消费的 JSON 对象字符串。
+func ParseHTTPMultiRoundSpec(spec RawHTTPMultiRoundSpec) (MultiRoundSpec, error) {
+	if strings.TrimSpace(spec.BaseURL) == "" {
+		return MultiRoundSpec{}, fmt.Errorf("generic: base_url is required")
+	}
+	if len(spec.Rounds) == 0 {
+		return MultiRoundSpec{}, fmt.Errorf("generic: rounds is required")
+	}
+	if len(spec.Rounds) < 2 || len(spec.Rounds) > 5 {
+		return MultiRoundSpec{}, fmt.Errorf("generic: rounds must contain 2-5 items")
+	}
+
+	mode := strings.TrimSpace(spec.Model)
+	if mode == "" {
+		return MultiRoundSpec{}, fmt.Errorf("generic: model is required")
+	}
+	if mode != "remote_session" && mode != "local_history" {
+		return MultiRoundSpec{}, fmt.Errorf("generic: invalid model %q, must be remote_session or local_history", spec.Model)
+	}
+
+	rounds := make([]RoundPair, len(spec.Rounds))
+	for i, r := range spec.Rounds {
+		if strings.TrimSpace(r.Request) == "" {
+			return MultiRoundSpec{}, fmt.Errorf("generic: rounds[%d].request is required", i)
+		}
+		if strings.TrimSpace(r.Response) == "" {
+			return MultiRoundSpec{}, fmt.Errorf("generic: rounds[%d].response is required", i)
+		}
+
+		_, reqHeaders, reqBodyMap, err := parseHTTPRequest(r.Request)
+		if err != nil {
+			return MultiRoundSpec{}, fmt.Errorf("generic: parse rounds[%d].request failed: %w", i, err)
+		}
+		if reqBodyMap == nil {
+			return MultiRoundSpec{}, fmt.Errorf("generic: rounds[%d].request body is required", i)
+		}
+		reqBodyBytes, err := json.Marshal(reqBodyMap)
+		if err != nil {
+			return MultiRoundSpec{}, fmt.Errorf("generic: marshal rounds[%d].request body failed: %w", i, err)
+		}
+
+		respHeaders, respBody, err := extractHTTPResponseJSONBodyForInference(r.Response)
+		if err != nil {
+			return MultiRoundSpec{}, fmt.Errorf("generic: parse rounds[%d].response failed: %w", i, err)
+		}
+
+		rounds[i] = RoundPair{
+			Request: RawPacket{
+				Headers: reqHeaders,
+				Body:    string(reqBodyBytes),
+			},
+			Response: RawPacket{
+				Headers: respHeaders,
+				Body:    respBody,
+			},
+		}
+	}
+
+	return MultiRoundSpec{
+		URL:          spec.BaseURL,
+		Rounds:       rounds,
+		Conversation: ConversationProfile{Mode: mode},
+	}, nil
+}
+
+// extractHTTPResponseJSONBodyForInference 从完整 HTTP/SSE 响应提取可用于推理的 JSON 对象字符串。
+// - 普通 JSON 响应：返回 trim 后 body 原文（必须是 JSON 对象）
+// - SSE 响应：按优先级选择 event:complete > data.status=="complete" > 最后一个可解析 JSON 对象帧
+func extractHTTPResponseJSONBodyForInference(text string) (map[string]string, string, error) {
+	if _, err := parseHTTPResponseSpec(text, nil); err != nil {
+		return nil, "", err
+	}
+
+	respHeaders, bodyLines, isSSE := splitHTTPResponseText(text)
+	respBody := strings.TrimSpace(strings.Join(bodyLines, "\n"))
+	if respBody == "" {
+		return nil, "", fmt.Errorf("response body is required")
+	}
+
+	if !isSSE {
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(respBody), &obj); err != nil {
+			return nil, "", fmt.Errorf("response body is not valid JSON object: %w", err)
+		}
+		return respHeaders, respBody, nil
+	}
+
+	rawFrames, _ := parseRawSSEFrames(bodyLines)
+	var eventCompleteObj map[string]any
+	var statusCompleteObj map[string]any
+	var lastJSONObj map[string]any
+
+	for _, f := range rawFrames {
+		var obj map[string]any
+		if err := json.Unmarshal([]byte(f.data), &obj); err != nil {
+			continue
+		}
+		lastJSONObj = obj
+		if strings.EqualFold(strings.TrimSpace(f.event), "complete") {
+			eventCompleteObj = obj
+		}
+		if status, ok := obj["status"].(string); ok && strings.EqualFold(strings.TrimSpace(status), "complete") {
+			statusCompleteObj = obj
+		}
+	}
+
+	selected := eventCompleteObj
+	if selected == nil {
+		selected = statusCompleteObj
+	}
+	if selected == nil {
+		selected = lastJSONObj
+	}
+	if selected == nil {
+		return nil, "", fmt.Errorf("sse response has no parseable JSON object data frame")
+	}
+
+	normalized, err := json.Marshal(selected)
+	if err != nil {
+		return nil, "", fmt.Errorf("marshal selected SSE frame failed: %w", err)
+	}
+	return respHeaders, string(normalized), nil
 }
 
 // parseHTTPRequest 从原始 HTTP 请求文本解析出 method、headers 和 body。
@@ -104,10 +246,17 @@ func parseHTTPRequest(text string) (method string, headers map[string]string, bo
 			if idx > 0 {
 				k := strings.TrimSpace(raw[:idx])
 				v := strings.TrimSpace(raw[idx+1:])
-				// 跳过 Host（从 base_url 推导，无需重复传入）
-				if !strings.EqualFold(k, "host") {
-					headers[k] = v
+				// 跳过传输层 headers：
+				// - Host: 从 base_url 推导
+				// - Accept-Encoding: 由 Go HTTP 自动管理，保留会导致服务端返回 brotli/zstd 等 SDK 无法解压的编码
+				// - Content-Length: 由 Go 根据 body 自动计算
+				// - Connection / Transfer-Encoding: HTTP/2 自动管理
+				lk := strings.ToLower(k)
+				if lk == "host" || lk == "accept-encoding" || lk == "content-length" ||
+					lk == "connection" || lk == "transfer-encoding" {
+					continue
 				}
+				headers[k] = v
 			}
 		} else {
 			if !strings.HasPrefix(trimmed, "#") {
@@ -132,37 +281,56 @@ func parseHTTPRequest(text string) (method string, headers map[string]string, bo
 // hexOnlyRe 匹配 HTTP chunked 传输编码的块大小行（纯十六进制数字）。
 var hexOnlyRe = regexp.MustCompile(`^[0-9a-fA-F]+$`)
 
-// parseHTTPResponseSpec 从原始 HTTP 响应文本自动推断流式响应配置。
-func parseHTTPResponseSpec(text string, chainFields []ChainField) (RawResponseSpec, error) {
-	if strings.TrimSpace(text) == "" {
-		// 响应文本为空时返回空配置，由调用方按需补充
-		return RawResponseSpec{}, nil
+// rawSSEFrame 表示一条 SSE data 行及其 event 上下文。
+type rawSSEFrame struct {
+	event string
+	data  string
+}
+
+// splitHTTPResponseText 解析原始 HTTP 响应文本，返回 headers、bodyLines 和是否为 SSE。
+// 支持仅提供 SSE body（无 HTTP 响应头）的输入。
+func splitHTTPResponseText(text string) (map[string]string, []string, bool) {
+	text = strings.ReplaceAll(text, "\r\n", "\n")
+	lines := strings.Split(text, "\n")
+
+	startsWithSSE := false
+	for _, l := range lines {
+		trimmed := strings.TrimSpace(l)
+		if trimmed == "" {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "event:") || strings.HasPrefix(trimmed, "data:") {
+			startsWithSSE = true
+		}
+		break
 	}
 
-	text = strings.ReplaceAll(text, "\r\n", "\n")
-
-	// 分离响应头与响应体
-	inBody := false
-	isSSE := false
+	headers := make(map[string]string)
+	inBody := startsWithSSE // 若以 SSE 内容开头，跳过 HTTP 头解析
+	isSSE := startsWithSSE
 	var bodyLines []string
 
-	for _, line := range strings.Split(text, "\n") {
+	for _, line := range lines {
 		if !inBody {
 			lower := strings.ToLower(line)
-			if strings.HasPrefix(lower, "content-type:") {
-				if strings.Contains(lower, "text/event-stream") {
-					isSSE = true
-				}
+			if strings.HasPrefix(lower, "content-type:") && strings.Contains(lower, "text/event-stream") {
+				isSSE = true
 			}
 			if strings.TrimSpace(line) == "" {
 				inBody = true
+				continue
 			}
-		} else {
-			bodyLines = append(bodyLines, line)
+			if idx := strings.Index(line, ":"); idx > 0 {
+				k := strings.TrimSpace(line[:idx])
+				v := strings.TrimSpace(line[idx+1:])
+				headers[k] = v
+			}
+			continue
 		}
+		bodyLines = append(bodyLines, line)
 	}
 
-	// 若响应头无 SSE 标识，从 body 自动检测
+	// 若响应头无 SSE 标识，从 body 自动检测。
 	if !isSSE {
 		for _, line := range bodyLines {
 			if strings.HasPrefix(strings.TrimSpace(line), "data:") {
@@ -172,52 +340,26 @@ func parseHTTPResponseSpec(text string, chainFields []ChainField) (RawResponseSp
 		}
 	}
 
+	return headers, bodyLines, isSSE
+}
+
+// parseHTTPResponseSpec 从原始 HTTP 响应文本自动推断流式响应配置。
+func parseHTTPResponseSpec(text string, chainFields []ChainField) (RawResponseSpec, error) {
+	if strings.TrimSpace(text) == "" {
+		// 响应文本为空时返回空配置，由调用方按需补充
+		return RawResponseSpec{}, nil
+	}
+
+	_, bodyLines, isSSE := splitHTTPResponseText(text)
+
 	protocol := "ndjson"
 	if isSSE {
 		protocol = "sse"
 	}
 
-	// 解析 SSE 帧，同时跟踪 SSE 协议级 event: 头
-	// 支持两种 data 格式：JSON 对象（Dify 风格）和原始 JSON 字符串（OpenAI 风格）
-	type rawSSEFrame struct {
-		event string
-		data  string
-	}
-	var rawFrames []rawSSEFrame
-	var curEvent string
-	hasDoneMarker := false
-
-	for _, line := range bodyLines {
-		trimmed := strings.TrimSpace(line)
-		if trimmed == "" {
-			curEvent = "" // SSE 帧分隔符，重置当前事件类型
-			continue
-		}
-		if strings.HasPrefix(trimmed, "#") {
-			continue
-		}
-		// 跳过 HTTP chunked 编码块大小行
-		if hexOnlyRe.MatchString(trimmed) {
-			continue
-		}
-		// 跳过 SSE id/retry 字段
-		if strings.HasPrefix(trimmed, "id:") || strings.HasPrefix(trimmed, "retry:") {
-			continue
-		}
-		if strings.HasPrefix(trimmed, "event:") {
-			curEvent = strings.TrimSpace(trimmed[6:])
-			continue
-		}
-		if trimmed == "data: [DONE]" || trimmed == "data:[DONE]" {
-			hasDoneMarker = true
-			curEvent = ""
-			continue
-		}
-		if strings.HasPrefix(trimmed, "data:") {
-			data := strings.TrimSpace(trimmed[5:])
-			rawFrames = append(rawFrames, rawSSEFrame{event: curEvent, data: data})
-		}
-	}
+	// 解析 SSE 帧，同时跟踪 SSE 协议级 event: 头。
+	// 支持两种 data 格式：JSON 对象（Dify 风格）和原始 JSON 字符串（OpenAI 风格）。
+	rawFrames, hasDoneMarker := parseRawSSEFrames(bodyLines)
 
 	// 分析各帧：区分 JSON 对象帧（Dify 风格）和原始字符串帧（OpenAI 风格）
 	var jsonFrames []map[string]any
@@ -245,6 +387,9 @@ func parseHTTPResponseSpec(text string, chainFields []ChainField) (RawResponseSp
 					// SSE 协议级终止事件
 					sseEventDone = f.event
 				}
+			} else if f.event != "" && isTerminalEventName(f.event) && sseEventDone == "" {
+				// 非字符串类型（如 JSON boolean "true"）：仅通过 event 名称判断终止
+				sseEventDone = f.event
 			}
 		}
 	}
@@ -305,12 +450,53 @@ func parseHTTPResponseSpec(text string, chainFields []ChainField) (RawResponseSp
 	}, nil
 }
 
+// parseRawSSEFrames 解析 SSE body 行，返回 data 帧及 [DONE] 标记。
+func parseRawSSEFrames(bodyLines []string) ([]rawSSEFrame, bool) {
+	var rawFrames []rawSSEFrame
+	var curEvent string
+	hasDoneMarker := false
+
+	for _, line := range bodyLines {
+		trimmed := strings.TrimSpace(line)
+		if trimmed == "" {
+			curEvent = "" // SSE 帧分隔符，重置当前事件类型
+			continue
+		}
+		if strings.HasPrefix(trimmed, "#") {
+			continue
+		}
+		// 跳过 HTTP chunked 编码块大小行
+		if hexOnlyRe.MatchString(trimmed) {
+			continue
+		}
+		// 跳过 SSE id/retry 字段
+		if strings.HasPrefix(trimmed, "id:") || strings.HasPrefix(trimmed, "retry:") {
+			continue
+		}
+		if strings.HasPrefix(trimmed, "event:") {
+			curEvent = strings.TrimSpace(trimmed[6:])
+			continue
+		}
+		if trimmed == "data: [DONE]" || trimmed == "data:[DONE]" {
+			hasDoneMarker = true
+			curEvent = ""
+			continue
+		}
+		if strings.HasPrefix(trimmed, "data:") {
+			data := strings.TrimSpace(trimmed[5:])
+			rawFrames = append(rawFrames, rawSSEFrame{event: curEvent, data: data})
+		}
+	}
+
+	return rawFrames, hasDoneMarker
+}
+
 // isTerminalEventName 判断 SSE 事件名称是否表示流结束。
 func isTerminalEventName(name string) bool {
 	lower := strings.ToLower(name)
 	return strings.Contains(lower, "end") || strings.Contains(lower, "done") ||
 		strings.Contains(lower, "finish") || strings.Contains(lower, "stop") ||
-		strings.Contains(lower, "complete")
+		strings.Contains(lower, "complete") || strings.Contains(lower, "close")
 }
 
 // detectDeltaPathsByPlaceholder 从响应帧中找出值为 "$$$" 的字段路径，作为流式 delta 内容路径。
@@ -326,6 +512,8 @@ func detectDeltaPathsByPlaceholder(frames []map[string]any) []string {
 }
 
 // collectPlaceholderPaths 递归遍历 JSON 值，收集所有值为 "$$$" 的字段路径（点分隔）。
+// 当数组只有一个元素时，使用 -1（最后一个元素）代替 0，
+// 因为模板中的单元素数组通常只是示例，实际响应中目标元素可能在不同位置。
 func collectPlaceholderPaths(v any, prefix string, seen map[string]struct{}, paths *[]string) {
 	switch val := v.(type) {
 	case map[string]any:
@@ -338,11 +526,15 @@ func collectPlaceholderPaths(v any, prefix string, seen map[string]struct{}, pat
 		}
 	case []any:
 		for i, child := range val {
+			idxStr := fmt.Sprintf("%d", i)
+			if len(val) == 1 {
+				idxStr = "-1" // 单元素数组 → "最后一个元素"
+			}
 			var path string
 			if prefix != "" {
-				path = fmt.Sprintf("%s.%d", prefix, i)
+				path = prefix + "." + idxStr
 			} else {
-				path = fmt.Sprintf("%d", i)
+				path = idxStr
 			}
 			collectPlaceholderPaths(child, path, seen, paths)
 		}
@@ -367,6 +559,7 @@ func detectRemoteIDByPlaceholder(frames []map[string]any) string {
 }
 
 // findFirstPlaceholder 递归遍历 JSON 值，返回第一个匹配目标占位符的字段路径。
+// 同 collectPlaceholderPaths，单元素数组使用 -1 索引。
 func findFirstPlaceholder(v any, prefix, target string) string {
 	switch val := v.(type) {
 	case map[string]any:
@@ -381,11 +574,15 @@ func findFirstPlaceholder(v any, prefix, target string) string {
 		}
 	case []any:
 		for i, child := range val {
+			idxStr := fmt.Sprintf("%d", i)
+			if len(val) == 1 {
+				idxStr = "-1"
+			}
 			var path string
 			if prefix != "" {
-				path = fmt.Sprintf("%s.%d", prefix, i)
+				path = prefix + "." + idxStr
 			} else {
-				path = fmt.Sprintf("%d", i)
+				path = idxStr
 			}
 			if found := findFirstPlaceholder(child, path, target); found != "" {
 				return found

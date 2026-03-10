@@ -51,9 +51,9 @@ func main() {
 	// ========================================
 	// 场景3：File SessionStore
 	// ========================================
-	//fmt.Println("\n场景3：=========================File SessionStore=========================")
-	//example3_FileStore(cli, ctx)
-	//time.Sleep(10 * time.Second)
+	fmt.Println("\n场景3：=========================File SessionStore=========================")
+	example3_FileStore(cli, ctx)
+	time.Sleep(10 * time.Second)
 
 	// ========================================
 	// 场景4：SQLite SessionStore

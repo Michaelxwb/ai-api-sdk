@@ -106,10 +106,26 @@ func ParseRawIntegration(raw RawIntegrationSpec) (*CompiledIntegration, error) {
 		return nil, err
 	}
 
+	// Separate dynamic headers (containing {{uuid}}) from static ones.
+	// Dynamic headers are stored in the profile and rendered per-request.
+	var dynamicHeaders map[string]string
+	if len(extraHeaders) > 0 {
+		for k, v := range extraHeaders {
+			if strings.Contains(v, "{{uuid}}") {
+				if dynamicHeaders == nil {
+					dynamicHeaders = make(map[string]string)
+				}
+				dynamicHeaders[k] = v
+				delete(extraHeaders, k)
+			}
+		}
+	}
+
 	profile := GenericProfile{
 		Request: RequestProfile{
 			Method:         method,
 			Path:           path,
+			DynamicHeaders: dynamicHeaders,
 			BodyTemplate:   body,
 			SessionIDField: sessionIDField,
 		},
@@ -261,6 +277,62 @@ func ExtractCredential(headers map[string]string) (*auth.Credential, map[string]
 	}
 
 	return nil, extraHeaders, nil
+}
+
+// RawPacket represents a raw HTTP request or response packet.
+type RawPacket struct {
+	Headers map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
+	Body    string            `json:"body" yaml:"body"`
+}
+
+// MultiRoundSpec provides 2~5 rounds of raw request/response packets for auto-inference.
+// Each round must contain both request and response. Default recommendation: 3~5 rounds.
+type MultiRoundSpec struct {
+	// URL is the full endpoint URL.
+	URL string `json:"url" yaml:"url"`
+	// Rounds contains 2~5 complete request/response pairs.
+	Rounds []RoundPair `json:"rounds" yaml:"rounds"`
+	// Conversation defines conversation mode (required).
+	Conversation ConversationProfile `json:"conversation" yaml:"conversation"`
+}
+
+// RoundPair is a single round's request + response pair.
+type RoundPair struct {
+	Request  RawPacket `json:"request" yaml:"request"`
+	Response RawPacket `json:"response" yaml:"response"`
+}
+
+// TwoRoundSpec is a backward-compatible alias for MultiRoundSpec with exactly 2 rounds.
+// Internally converted to MultiRoundSpec for processing.
+type TwoRoundSpec struct {
+	URL    string `json:"url" yaml:"url"`
+	Round1 struct {
+		Request  RawPacket `json:"request" yaml:"request"`
+		Response RawPacket `json:"response" yaml:"response"`
+	} `json:"round1" yaml:"round1"`
+	Round2 struct {
+		Request  RawPacket `json:"request" yaml:"request"`
+		Response RawPacket `json:"response" yaml:"response"`
+	} `json:"round2" yaml:"round2"`
+	Conversation ConversationProfile `json:"conversation" yaml:"conversation"`
+}
+
+// InferIntegrationByTwoRound is a backward-compatible entry point.
+// It converts TwoRoundSpec to MultiRoundSpec and delegates to InferIntegrationByMultiRound.
+func InferIntegrationByTwoRound(spec TwoRoundSpec) (*InferredIntegration, error) {
+	if spec.Round1.Request.Body == "" || spec.Round1.Response.Body == "" ||
+		spec.Round2.Request.Body == "" || spec.Round2.Response.Body == "" {
+		return nil, fmt.Errorf("generic: two_round_spec requires 4 packets")
+	}
+	multi := MultiRoundSpec{
+		URL: spec.URL,
+		Rounds: []RoundPair{
+			{Request: spec.Round1.Request, Response: spec.Round1.Response},
+			{Request: spec.Round2.Request, Response: spec.Round2.Response},
+		},
+		Conversation: spec.Conversation,
+	}
+	return InferIntegrationByMultiRound(multi)
 }
 
 // chainPlaceholderFormatRe 校验占位符格式：$$$NAME$$$ 其中 NAME 为非空大写字母/数字/下划线。

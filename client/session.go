@@ -143,8 +143,16 @@ func (s *Session) Chat(ctx context.Context, req base.ChatRequest) (base.ChatResp
 // chatRemoteSession handles remote_session mode for Chat.
 // No local history is loaded. session_id is injected only when s.id != "".
 func (s *Session) chatRemoteSession(ctx context.Context, req base.ChatRequest, startNewChat bool) (base.ChatResponse, error) {
-	// Inject session_id for continuation turns
-	if !startNewChat && s.id != "" {
+	// For remote_session, auto-generate session ID on first turn.
+	if s.id == "" {
+		s.mu.Lock()
+		if s.id == "" {
+			s.id = strings.ReplaceAll(uuid.New().String(), "-", "")
+		}
+		s.mu.Unlock()
+	}
+
+	if !startNewChat {
 		req.SessionID = s.id
 	}
 
@@ -153,20 +161,22 @@ func (s *Session) chatRemoteSession(ctx context.Context, req base.ChatRequest, s
 		return base.ChatResponse{}, err
 	}
 
-	// Extract remote session_id from response
+	// Extract remote session_id from response (always update to use server-provided ID)
 	if !startNewChat && resp.SessionID != "" {
 		s.mu.Lock()
-		if s.id == "" {
-			s.id = resp.SessionID
-		}
+		s.id = resp.SessionID
 		s.mu.Unlock()
 
-		// Persist immediately
+		// Persist immediately (accumulate history from store)
 		if s.store != nil {
-			s.saveState(ctx, req, resp)
+			accReq := req
+			accReq.Messages = s.prependStoredMessages(ctx, req.Messages)
+			s.saveState(ctx, accReq, resp)
 		}
 	} else if !startNewChat && s.store != nil && s.id != "" {
-		s.saveState(ctx, req, resp)
+		accReq := req
+		accReq.Messages = s.prependStoredMessages(ctx, req.Messages)
+		s.saveState(ctx, accReq, resp)
 	}
 
 	return resp, nil
@@ -341,6 +351,23 @@ func (s *Session) saveState(ctx context.Context, req base.ChatRequest, resp base
 	}
 }
 
+// prependStoredMessages loads existing messages from store and prepends them to currentMsgs.
+// Used by remote_session mode to accumulate conversation history for local persistence,
+// since remote_session does not load history into req.Messages before sending.
+func (s *Session) prependStoredMessages(ctx context.Context, currentMsgs []base.Message) []base.Message {
+	if s.store == nil || s.ID() == "" {
+		return currentMsgs
+	}
+	state, err := s.store.Get(ctx, s.ID())
+	if err != nil || state == nil || len(state.Messages) == 0 {
+		return currentMsgs
+	}
+	result := make([]base.Message, 0, len(state.Messages)+len(currentMsgs))
+	result = append(result, state.Messages...)
+	result = append(result, currentMsgs...)
+	return result
+}
+
 // truncateHistory applies history window truncation.
 func (s *Session) truncateHistory(msgs []base.Message) []base.Message {
 	hw := s.historyWindow
@@ -369,7 +396,17 @@ func (s *Session) ChatStream(ctx context.Context, req base.ChatRequest) (<-chan 
 }
 
 func (s *Session) chatStreamRemoteSession(ctx context.Context, req base.ChatRequest, startNewChat bool) (<-chan streaming.StreamChunk, error) {
-	if !startNewChat && s.id != "" {
+	// For remote_session, auto-generate session ID on first turn.
+	// Some APIs (e.g., Qianwen) require session_id on every request.
+	if s.id == "" {
+		s.mu.Lock()
+		if s.id == "" {
+			s.id = strings.ReplaceAll(uuid.New().String(), "-", "")
+		}
+		s.mu.Unlock()
+	}
+
+	if !startNewChat {
 		req.SessionID = s.id
 	}
 
@@ -398,17 +435,17 @@ func (s *Session) chatStreamRemoteSession(ctx context.Context, req base.ChatRequ
 			// Immediately persist session_id on first sight
 			if !startNewChat && chunk.SessionID != "" && !sessionIDPersisted {
 				s.mu.Lock()
-				if s.id == "" {
-					s.id = chunk.SessionID
-				}
+				s.id = chunk.SessionID
 				s.mu.Unlock()
 
-				// Immediately save placeholder with just the session ID.
+				// Immediately save placeholder with session ID, preserving existing messages.
 				// Per design: remote_session first-round save failure is critical.
 				if s.store != nil {
+					existingMsgs := s.prependStoredMessages(ctx, nil)
 					placeholder := &session.SessionState{
 						ID:        s.ID(),
 						Provider:  s.provider,
+						Messages:  existingMsgs,
 						UpdatedAt: time.Now(),
 					}
 					if s.conversationMode != "" {
@@ -446,17 +483,18 @@ func (s *Session) chatStreamRemoteSession(ctx context.Context, req base.ChatRequ
 			return
 		}
 
-		// Full save after stream completes
+		// Full save after stream completes (accumulate history from store)
 		sessionID := s.ID()
 		if !startNewChat && s.store != nil && sessionID != "" {
-			newMsgs := append(req.Messages, base.Message{
+			allMsgs := s.prependStoredMessages(ctx, req.Messages)
+			allMsgs = append(allMsgs, base.Message{
 				Role:    "assistant",
 				Content: fullText,
 			})
 			state := &session.SessionState{
 				ID:        sessionID,
 				Provider:  s.provider,
-				Messages:  newMsgs,
+				Messages:  allMsgs,
 				UpdatedAt: time.Now(),
 			}
 			m := make(map[string]string, len(s.meta)+2)

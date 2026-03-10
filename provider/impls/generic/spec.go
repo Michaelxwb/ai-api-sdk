@@ -85,7 +85,10 @@ func (s *GenericSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, 
 		tmpl = expandHistoryMessages(tmpl, req.Messages)
 	}
 
-	bodyStr, err := renderTemplate(tmpl, input, sessionID, req.ChainValues)
+	// Pre-generate UUID so body and dynamic headers share the same value.
+	uuid := generateHexUUID()
+
+	bodyStr, err := renderTemplate(tmpl, input, sessionID, req.ChainValues, uuid)
 	if err != nil {
 		return nil, fmt.Errorf("generic: template render failed: %w", err)
 	}
@@ -111,6 +114,11 @@ func (s *GenericSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, 
 	httpReq.Header.Set("Content-Type", "application/json")
 	if req.Stream {
 		httpReq.Header.Set("Accept", "text/event-stream")
+	}
+
+	// Apply dynamic headers with per-request UUID.
+	for k, v := range s.profile.Request.DynamicHeaders {
+		httpReq.Header.Set(k, strings.ReplaceAll(v, "{{uuid}}", uuid))
 	}
 
 	return httpReq, nil

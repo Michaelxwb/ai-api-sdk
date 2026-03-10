@@ -29,6 +29,8 @@ type RequestProfile struct {
 	Method string `json:"method" yaml:"method"`
 	// Path is the URL path appended to BaseURL.
 	Path string `json:"path" yaml:"path"`
+	// DynamicHeaders are headers containing {{uuid}} placeholders, rendered per-request.
+	DynamicHeaders map[string]string `json:"dynamic_headers,omitempty" yaml:"dynamic_headers,omitempty"`
 	// BodyTemplate is the JSON body template with placeholders like {{input}}, {{session_id}}.
 	BodyTemplate map[string]any `json:"body_template" yaml:"body_template"`
 	// SessionIDField is the JSON field name for injecting session_id (e.g. "conversation_id").
@@ -68,4 +70,77 @@ type StreamProfile struct {
 type ConversationProfile struct {
 	// Mode is the conversation mode: "remote_session" or "local_history".
 	Mode string `json:"mode" yaml:"mode"`
+}
+
+// InferredField describes an inferred field classification from MultiRoundSpec analysis.
+type InferredField struct {
+	// RequestPath is the JSON path in the request body (e.g. "session_id").
+	RequestPath string `json:"request_path"`
+	// ResponsePath is the JSON path in the response body (e.g. "conversation_id").
+	ResponsePath string `json:"response_path,omitempty"`
+	// Class is the field classification: input, session_id, chain, dynamic, static.
+	Class string `json:"class"`
+	// Placeholder is the template placeholder (e.g. "{{input}}", "{{session_id}}", "$$$NAME$$$").
+	Placeholder string `json:"placeholder"`
+	// Confidence is the classification confidence score in [0, 1].
+	Confidence float64 `json:"confidence"`
+	// ConflictWith lists alternative candidate classifications when ambiguous.
+	ConflictWith []string `json:"conflict_with,omitempty"`
+	// Reason is a human-readable justification for the classification.
+	Reason string `json:"reason"`
+}
+
+// InferenceReport summarizes the result of MultiRoundSpec auto-inference.
+type InferenceReport struct {
+	// OverallConfidence is the aggregated confidence score.
+	OverallConfidence float64 `json:"overall_confidence"`
+	// Status is one of: auto_confirmed, pending_confirm, failed.
+	Status string `json:"status"`
+	// Fields lists all inferred field classifications.
+	Fields []InferredField `json:"fields"`
+	// Warnings lists non-fatal issues encountered during inference.
+	Warnings []string `json:"warnings,omitempty"`
+	// FallbackSuggested indicates whether manual RawIntegrationSpec is recommended.
+	FallbackSuggested bool `json:"fallback_suggested"`
+	// Suggestions lists actionable modification suggestions for the user.
+	Suggestions []Suggestion `json:"suggestions,omitempty"`
+	// FlowSpecMeta carries forward-compatible metadata for future FlowSpec extensions.
+	FlowSpecMeta FlowSpecMeta `json:"flow_spec_meta"`
+}
+
+// FlowSpecMeta provides forward-compatible metadata for future FlowSpec extensions.
+type FlowSpecMeta struct {
+	// Version is the spec version, fixed to "v1alpha1" for MultiRoundSpec.
+	Version string `json:"version"`
+	// Source identifies the input type, e.g. "MultiRoundSpec".
+	Source string `json:"source"`
+}
+
+// Suggestion describes an actionable modification recommendation.
+type Suggestion struct {
+	// Target is the field path or config key this suggestion applies to.
+	Target string `json:"target"`
+	// Action is the suggested operation: replace, add, remove, review.
+	Action string `json:"action"`
+	// Value is the suggested value or candidate value.
+	Value string `json:"value"`
+	// Reason explains why this suggestion is made.
+	Reason string `json:"reason"`
+	// Priority is high, medium, or low.
+	Priority string `json:"priority"`
+}
+
+// InferredIntegration is the output of MultiRoundSpec auto-inference.
+// It always contains a GenericProfile and an InferenceReport.
+type InferredIntegration struct {
+	// Profile is the inferred GenericProfile (may be partial if status != auto_confirmed).
+	Profile *GenericProfile `json:"profile"`
+	// Report contains inference details, confidence, and suggestions.
+	Report *InferenceReport `json:"report"`
+	// Credential is the extracted authentication credential, or nil.
+	Credential interface{} `json:"credential,omitempty"`
+	// BaseURL is the parsed base URL (scheme + host).
+	BaseURL string `json:"base_url"`
+	// ExtraHeaders are non-auth headers to inject.
+	ExtraHeaders map[string]string `json:"extra_headers,omitempty"`
 }

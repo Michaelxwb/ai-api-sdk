@@ -44,6 +44,9 @@ func ExtractJSONPath(data []byte, path string) (string, error) {
 			if err != nil {
 				return "", fmt.Errorf("json path expects array index at %q", part)
 			}
+			if idx < 0 {
+				idx = len(v) + idx // -1 → last element, -2 → second to last, etc.
+			}
 			if idx < 0 || idx >= len(v) {
 				return "", fmt.Errorf("json path index out of range: %d", idx)
 			}
@@ -70,6 +73,14 @@ func MakeJSONPathExtractor(deltaPath, donePath, doneValue, errorPath string) Del
 //     (for streams that signal termination via an SSE "event:" header, e.g. "event: stop").
 //   - Non-empty donePath → extract from data JSON and compare (standard JSON path done check).
 func MakeJSONPathMultiExtractor(deltaPaths []string, donePath, doneValue, errorPath string) DeltaExtractor {
+	// Auto-detect cumulative vs delta mode. Once cumulative is detected
+	// (frame N's text strictly extends frame N-1's text), the flag stays on
+	// and subsequent frames only emit the new suffix. Repeated identical
+	// frames emit nothing. Transparent for delta-mode APIs where consecutive
+	// texts never form a prefix chain.
+	var lastCumulative string
+	var cumulativeMode bool
+
 	return func(event string, data []byte) (text string, done bool, err error) {
 		// Determine done first.
 		if doneValue != "" {
@@ -105,6 +116,22 @@ func MakeJSONPathMultiExtractor(deltaPaths []string, donePath, doneValue, errorP
 				builder.WriteString(val)
 			}
 			text = builder.String()
+		}
+
+		// Auto-detect cumulative mode: if extracted text strictly extends
+		// the previous accumulated text, switch to cumulative mode permanently.
+		if text != "" {
+			if !cumulativeMode && lastCumulative != "" &&
+				len(text) > len(lastCumulative) && strings.HasPrefix(text, lastCumulative) {
+				cumulativeMode = true
+			}
+			if cumulativeMode && strings.HasPrefix(text, lastCumulative) {
+				// Strip known prefix; empty result when text repeats identically.
+				text = text[len(lastCumulative):]
+				lastCumulative += text
+			} else {
+				lastCumulative += text
+			}
 		}
 
 		// If text is empty, check for server-side error.

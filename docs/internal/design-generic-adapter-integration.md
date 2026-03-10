@@ -37,12 +37,13 @@
 
 ## 1.1. 目的
 
-本说明书描述 Generic Adapter 的重构式设计方案，目标是在不依赖自动识别的前提下，统一标准 API 与非标准 API 的接入路径，并彻底重构多轮对话的会话模型。
+本说明书描述 Generic Adapter 的重构式设计方案，目标是在不依赖自动识别的前提下，统一标准 API 与非标准 API 的接入路径，并彻底重构多轮对话的会话模型。V2.6 方案在非标准接入上仍依赖"单轮样本+人工占位"配置，接入成本高、调试链路长，V2.7 在此基础上补充 MultiRoundSpec（2~5轮，默认建议3~5轮）自动推断能力。
 
 **核心目标**：
 - 取消"本地会话 ID 与远端会话 ID 混用"的实现方式
 - 用户必须显式声明目标模型是否支持远端 `session_id` 能力
 - 非标准接口只需传 `应用 URL + 请求包 + 响应包 (+ 会话模式)`，SDK 内部自动解析执行
+- 新增 MultiRoundSpec（2~5轮请求/响应原始报文，默认建议3~5轮）自动推断，降低"单轮样本+人工占位"接入成本
 - 本地始终保存完整对话归档；是否用于请求由会话模式决定
 
 本版本明确为重构方案，不考虑旧行为兼容。
@@ -54,7 +55,7 @@
 | 类别 | 内容 |
 |------|------|
 | **范围** | 会话标识模型重构；Session 执行引擎统一；Generic Adapter 模板驱动接入；原始报文（Raw Spec）解析与编译；鉴权标准化提取；SessionStore 归档 |
-| **非目标** | 不改动已有 Provider 的上层业务逻辑；不处理 SDK 以外的任务调度与攻击策略；不保持与旧 `SessionID` 单字段行为的向后兼容 |
+| **非目标** | 不改动已有 Provider 的上层业务逻辑；不处理 SDK 以外的任务调度与攻击策略；不延续旧 `SessionID` 单字段行为 |
 | **前置假设** | 调用方已正确配置目标模型的 URL 和鉴权信息；SessionStore 实现由接入方提供，SDK 仅定义接口；目标模型 API 返回 HTTP 200 表示成功 |
 
 ## 1.3. 定义和缩写
@@ -94,7 +95,12 @@
 | REQ-008 | HTTP 响应自动处理 gzip 压缩 | 3.5 Generic Adapter | TC-008 |
 | REQ-009 | 多轮错误策略可配置（continue/abort） | 3.4 Session 执行引擎 | TC-009 |
 | REQ-010 | local_history 模式支持历史窗口裁剪 | 3.4 Session 执行引擎 | TC-010 |
-| REQ-011 | 支持多轮请求-响应字段链路传递（ChainFields）：从指定 SSE event 类型提取任意响应字段，注入到下一轮请求体占位符；ChainFields 不传则不启用，传了则三个子字段全部必填 | 3.5 Generic Adapter、3.6 原始报文解析 | TC-011 |
+| REQ-011 | 支持多轮请求-响应字段链路传递（ChainFields）：从指定 SSE event 类型提取任意响应字段，注入到下一轮请求体占位符；ChainFields 不传则不启用，传了则 `Placeholder` 与 `ResponsePath` 必填，`ExtractOnEvent` 可空（空表示按任意事件帧提取） | 3.5 Generic Adapter、3.6 原始报文解析 | TC-011 |
+| REQ-012 | 支持 MultiRoundSpec 输入（2~5轮，默认建议3~5轮）并自动推断接入配置 | 3.6 原始报文解析 | TC-012 |
+| REQ-013 | 自动推断字段分类：`input` / `session_id` / `chain` / `dynamic` / `static` | 3.6 原始报文解析 | TC-013 |
+| REQ-014 | 自动推断需输出置信度并支持确认流程（低置信度进入告警态 `pending_confirm`，但不阻断 Session 创建） | 3.6 原始报文解析 | TC-014 |
+| REQ-015 | 自动推断失败时必须可回退到手工 RawSpec 模式 | 3.6 原始报文解析 | TC-015 |
+| REQ-016 | 自动推断产物需前向兼容 FlowSpec（未来多轮/多步编排） | 3.6 原始报文解析 | TC-016 |
 
 ---
 
@@ -102,10 +108,11 @@
 
 ## 2.1. 问题与背景
 
-现有实现存在两个结构性问题：
+现有实现存在三个结构性问题：
 
 1. `s.id` 同时承担本地存储键和远端会话键，语义冲突，导致 Dify 等 provider 出现特判逻辑。
 2. `req.SessionID = s.id` 的默认赋值策略会在会话能力不明时误传远端会话参数。
+3. 非标准接入仍依赖"单轮样本+人工占位"：需人工标注 `{{input}}` / `{{session_id}}` / `$$$CHAIN$$$` 占位符，接入成本高且易误配。
 
 此外，对比旧项目（AI-Security-Platform）的实际多轮实现，还暴露出以下工程问题：
 
@@ -491,12 +498,12 @@ type StreamChunk struct {
 
 **功能描述**
 
-将外部三字段输入编译为 `GenericProfile + Credential`，URL 解析包含 base_url/path 合成规则。
+将外部三字段输入编译为 `GenericProfile + Credential`，URL 解析包含 base_url/path 合成规则；V2.7 新增 MultiRoundSpec（2~5轮原始报文，默认建议3~5轮）自动推断能力，用于替代"单轮样本+人工占位"的高成本接入方式。业务层如仅有 2 轮数据，可直接构造 `MultiRoundSpec{Rounds: []RoundPair{...}}`。
 
 **输入和输出**
 
-- 输入：`RawIntegrationSpec`
-- 输出：`CompiledIntegration`
+- 输入：`RawIntegrationSpec` 或 `MultiRoundSpec`
+- 输出：`CompiledIntegration`（手工模式）或 `InferredIntegration`（自动推断模式）
 
 **数据结构**
 
@@ -528,7 +535,80 @@ type CompiledIntegration struct {
     Provider   *config.ProviderConfig
     Profile    *GenericProfile
 }
+
+// MultiRoundSpec 使用 2~5 轮完整原始报文做自动推断（默认建议3~5轮）：
+// rounds[i].request + rounds[i].response，i ∈ [1,N]，N ∈ [2,5]
+type MultiRoundSpec struct {
+    URL    string
+    Rounds []struct {
+        Request  RawPacket
+        Response RawPacket
+    }
+    Conversation struct {
+        Mode    ConversationMode // 必填
+        OnError OnErrorStrategy  // 默认 abort
+    }
+}
+
+type InferredField struct {
+    RequestPath  string
+    ResponsePath string
+    Class        string   // input | session_id | chain | dynamic | static
+    Placeholder  string   // {{input}} / {{session_id}} / $$$NAME$$$
+    Confidence   float64  // [0,1]
+    ConflictWith []string // 发生冲突的候选分类
+    Reason       string   // 推断依据摘要
+}
+
+type InferenceReport struct {
+    OverallConfidence float64
+    Status            string // auto_confirmed | pending_confirm | failed
+    Fields            []InferredField
+    Warnings          []string
+    FallbackSuggested bool
+    FlowSpecMeta struct {
+        Version string // "v1alpha1"
+        Source  string // "MultiRoundSpec"
+    }
+}
+
+// 自动推断输出契约：始终返回 GenericProfile + InferenceReport
+type InferredIntegration struct {
+    Profile *GenericProfile
+    Report  *InferenceReport
+}
 ```
+
+**MultiRoundSpec 输入约束（业务层提供 JSON）**
+
+业务层以独立 JSON 文件提供 2~5 轮样本（默认建议3~5轮），推荐结构如下：
+
+```json
+{
+  "model": "remote_session",
+  "base_url": "https://example.com/v1/chat/completions",
+  "rounds": [
+    {
+      "request": "<raw http request text>",
+      "response": "<raw http response text>"
+    },
+    {
+      "request": "<raw http request text>",
+      "response": "<raw http response text>"
+    }
+  ]
+}
+```
+
+约束规则（Phase-1）：
+
+1. `model` 必填，且只能为 `remote_session` 或 `local_history`。
+2. `base_url` 必填。
+3. `rounds` 至少 2 轮、最多 5 轮（默认建议3~5轮）；每轮 `request` 与 `response` 均必填，缺一即报错。
+4. Phase-1 仅支持可解析 JSON body（请求/响应 body 需可反序列化为 JSON 对象）。
+5. `$$$` 仅允许用于“问题文本字段”和“回答文本字段”占位。
+6. `session_id` / `parent_message_id` / `tool_call_id` 等链路字段必须保留真实值，不允许替换为 `$$$`。
+7. 各轮必须构成真实续轮关系（例如后续轮请求引用前序轮响应中的会话/链路值），不可使用独立会话样本。
 
 **内部逻辑**
 
@@ -552,7 +632,7 @@ ChainFields 校验：
     Placeholder 为空 → 报错
     Placeholder 格式不符合 $$$NAME$$$ 或 NAME 为空 → 报错
     ResponsePath 为空 → 报错
-    ExtractOnEvent 为空 → 报错
+    ExtractOnEvent 为空 → 允许（按任意事件帧提取）
   通过校验后将 ChainFields 直接写入 GenericProfile.Response.Stream.ChainFields
 
 响应包解析：
@@ -561,14 +641,254 @@ ChainFields 校验：
   3. 识别流式协议（有 data: 前缀行 → SSE，否则 → NDJSON）
 
 调用 ExtractCredential 从 Request.Headers 提取鉴权
+
+MultiRoundSpec 自动推断流程（REQ-012~REQ-016）：
+  输入为 `rounds`（2~5轮，默认建议3~5轮），每轮包含 request/response 报文。
+
+  1. 预处理（第一阶段：规则推断，deterministic）
+    - 将各轮报文 Body 解析为 JSONPath -> 标量值映射
+    - 生成跨轮请求 diff：Diff(round[i].request, round[i+1].request)
+    - 生成跨轮响应值索引：Index(round[i].response, round[i+1].response)
+
+  2. 字段分类推断规则（规则阶段）
+    - input：
+      相邻轮请求同一路径值发生变化，且新值不来源于前序轮 response 回写
+      -> 该路径标记为 input，模板替换为 {{input}}
+    - session_id：
+      后续轮 request 某路径值 == 前序轮 response 某路径值，且首轮同路径为空/缺失
+      或路径命名命中 session/conversation/thread
+      -> 请求路径标记为 session_id，提取路径标记为 RemoteIDPath，模板替换为 {{session_id}}
+    - chain：
+      后续轮 request 某路径值来源于前序轮 response，且未命中 session_id
+      -> 生成 ChainField（Placeholder/ResponsePath/ExtractOnEvent）
+    - dynamic：
+      请求差异字段无法稳定映射到 input/session_id/chain（如 timestamp/nonce/signature）
+      -> 标记为 dynamic，不固化静态值
+    - static：
+      多轮请求值一致且不依赖响应
+      -> 固化到 BodyTemplate
+
+  3. 冲突处理
+    - 同一路径命中多个分类时，按置信度最高者生效
+    - 若最高分与次高分差值 < conflict_margin（默认 0.10），标记冲突并进入 pending_confirm
+    - 冲突优先级（同分时）：session_id > chain > input > dynamic > static
+    - 同一 Placeholder 指向多个 ResponsePath：判定为 failed（返回 error，不创建 Session）
+
+  4. AI 协助分析（二阶段判别，可选）
+    - AI 协助为可选节点，默认关闭；仅在用户显式开启（配置项或业务参数）时才执行
+    - 第一阶段产出冲突字段与低置信字段后，可选调用本地 3B（OpenAI 兼容）模型进行重排与解释增强
+    - 未开启 AI 协助时，流程直接采用第一阶段规则推断结果并进入三态状态判定
+    - AI 仅可影响“冲突消解建议 / 置信度重排建议 / reason 文本解释”，不能直接覆盖硬约束
+    - 硬约束包括：链路字段保真、占位符合法性、必填报文完整性、轮次数范围（2~5）
+    - AI 调用失败（不可用、网络异常、超时、重试后失败）不阻断主流程，必须自动降级回第一阶段规则推断结果
+    - “80%/90%”仅为示例目标值，实际可用率需由业务回放验证集评估，不构成硬性 SLA。
+
+  5. 置信度与确认流程（告警不阻断）
+    - 每个字段输出 confidence（0~1）与 reason
+    - 汇总生成 OverallConfidence
+    - OverallConfidence >= auto_apply_threshold（默认 0.85）且无冲突 -> auto_confirmed
+    - 否则 -> pending_confirm（保留告警与复核建议），仍创建 Session 并返回 InferenceReport
+
+  6. 失败回退与前向兼容
+    - 三态会话行为固定：`auto_confirmed` 创建 Session；`pending_confirm` 也创建 Session（保留告警并返回 InferenceReport 供人工复核）；`failed` 返回 error 且不创建 Session
+    - 推断失败时，返回 error 且不创建 Session；若 InferenceReport 可用则附带报告用于排障与回退建议，并允许调用方回退到 RawIntegrationSpec 手工模式
+    - 输出契约固定为 GenericProfile + InferenceReport
+    - Report.FlowSpecMeta 固定写入 Version=v1alpha1、Source=MultiRoundSpec，保证后续扩展到 FlowSpec（N 轮/多步）时接口前向兼容
 ```
+
+### AI 协助标准 Prompt（OpenAI 兼容）
+
+为保证二阶段 AI 协助可复现、可审计、可降级，约定以下 Prompt 与输出规范。
+
+**System Prompt 模板（角色、边界、禁止项）**
+
+```text
+你是 MultiRoundSpec 推断流程中的“二阶段判别助手”。
+你的任务仅限：
+1) 给出冲突消解建议；
+2) 给出置信度重排建议；
+3) 生成可审计的 reason 解释。
+
+边界与硬约束：
+- 你不得修改或放宽 hard_constraints。
+- 你不得输出超出候选集合（rule_candidates）的新分类体系。
+- 你不得更改轮次数约束（2~5）、报文完整性、占位符合法性、链路字段保真要求。
+- 当证据不足或冲突未解时，必须建议人工确认（needs_human_confirm=true）。
+
+输出要求：
+- 仅输出 JSON；不得输出 Markdown、注释、前后缀解释文本。
+- 字段必须符合调用方给定 Schema；confidence 范围必须在 [0,1]。
+- 若无法可靠判断，保持保守：提高风险标记并要求人工确认。
+```
+
+**User Prompt 模板（输入数据结构）**
+
+```text
+请基于以下输入执行“冲突消解建议 + 置信度重排建议 + reason 解释”，并严格按 JSON Schema 输出。
+
+输入数据（JSON）：
+{
+  "rounds": [
+    {
+      "index": 1,
+      "request": {"flat_jsonpath": {"$.a.b": "..."}},
+      "response": {"flat_jsonpath": {"$.x.y": "..."}}
+    }
+  ],
+  "rule_candidates": [
+    {
+      "path": "$.request.body.session_id",
+      "candidates": [
+        {"classification": "session_id", "confidence": 0.72, "reason": "..."},
+        {"classification": "chain", "confidence": 0.66, "reason": "..."}
+      ],
+      "rule_winner": {"classification": "session_id", "confidence": 0.72}
+    }
+  ],
+  "conflicts": [
+    {
+      "path": "$.request.body.session_id",
+      "type": "close_scores",
+      "detail": "top1-top2 < conflict_margin"
+    }
+  ],
+  "hard_constraints": {
+    "round_count_range": [2, 5],
+    "placeholder_rules": [
+      "$$$ only allowed for question/answer text fields",
+      "session/chain fields must keep real values"
+    ],
+    "required_packets": "each round requires request+response",
+    "chain_integrity": "no placeholder -> multi response paths"
+  },
+  "thresholds": {
+    "auto_apply_threshold": 0.85,
+    "conflict_margin": 0.10
+  }
+}
+```
+
+**输出 JSON Schema（最小字段集）**
+
+```json
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "needs_human_confirm",
+    "field_decisions",
+    "conflict_resolutions",
+    "overall_confidence",
+    "risk_flags"
+  ],
+  "properties": {
+    "needs_human_confirm": {"type": "boolean"},
+    "field_decisions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "classification", "confidence", "reason"],
+        "properties": {
+          "path": {"type": "string"},
+          "classification": {
+            "type": "string",
+            "enum": ["input", "session_id", "chain", "dynamic", "static"]
+          },
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "reason": {"type": "string"}
+        }
+      }
+    },
+    "conflict_resolutions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["path", "resolution", "reason"],
+        "properties": {
+          "path": {"type": "string"},
+          "resolution": {"type": "string"},
+          "reason": {"type": "string"}
+        }
+      }
+    },
+    "overall_confidence": {"type": "number", "minimum": 0, "maximum": 1},
+    "risk_flags": {
+      "type": "array",
+      "items": {"type": "string"}
+    }
+  }
+}
+```
+
+**对外结果约定（用户反馈）**
+
+为满足“反馈给用户的结果里必须包含修改建议”，推断接口对外返回应包含 `suggestions` 字段：
+
+- `suggestions`：可执行修改建议列表（可为空，取决于状态）
+- 列表每项最小字段：
+  - `target`：建议作用目标（字段路径/配置项）
+  - `action`：建议动作（replace/add/remove/review 等）
+  - `value`：建议写入值或候选值
+  - `reason`：建议原因（对应冲突、低置信或失败原因）
+  - `priority`：优先级（high/medium/low）
+
+状态约束：
+
+- `pending_confirm`：`suggestions` 必须非空
+- `failed`：`suggestions` 至少包含一条“回退手工模式（RawIntegrationSpec）”建议
+- `auto_confirmed`：`suggestions` 可为空
+
+用户可读返回示例（JSON）：
+
+```json
+{
+  "result": "pending_confirm",
+  "score": 0.78,
+  "summary": "发现 2 个冲突字段，已创建 Session 并标记为 pending_confirm，需人工复核。",
+  "can_apply_directly": false,
+  "draft_config": {
+    "conversation_mode": "remote_session",
+    "session_id_path": "$.conversation_id"
+  },
+  "issues": [
+    "$.request.body.session_id 在 session_id 与 chain 间冲突"
+  ],
+  "suggestions": [
+    {
+      "target": "$.request.body.session_id",
+      "action": "review",
+      "value": "{{session_id}}",
+      "reason": "首轮为空且续轮回写命中前序响应字段",
+      "priority": "high"
+    }
+  ],
+  "next_steps": [
+    "确认冲突字段归类",
+    "复核冲突字段并更新告警处置结论"
+  ]
+}
+```
+
+**调用失败与降级**
+
+- AI 输出非 JSON、JSON 解析失败、字段缺失、字段越界（如 confidence 不在 [0,1]）时：视为无效输出，统一降级回规则阶段结果。
+- AI 服务超时、不可用、网络异常、重试后失败时：不阻断主流程，统一降级回规则阶段结果。
+- 降级后仍按规则阶段结果执行状态分流：`auto_confirmed / pending_confirm / failed` 判定逻辑不变。
 
 **接口设计**
 
 ```go
 func ParseRawIntegration(raw RawIntegrationSpec) (*CompiledIntegration, error)
+func InferIntegrationByMultiRound(spec MultiRoundSpec) (*InferredIntegration, error)
+func InferIntegrationByMultiRoundWithConfig(spec MultiRoundSpec, cfg InferenceConfig) (*InferredIntegration, error)
 func (c *Client) NewSessionFromRaw(raw RawIntegrationSpec, opts ...SessionOption) (*Session, error)
+func (c *Client) NewSessionFromMultiRound(spec MultiRoundSpec, opts ...SessionOption) (*Session, *InferredIntegration, error)
+func (c *Client) NewSessionFromMultiRoundWithConfig(spec MultiRoundSpec, cfg InferenceConfig, opts ...SessionOption) (*Session, *InferredIntegration, error)
 ```
+
+调用层可通过可选业务参数控制是否启用 AI 协助；未启用时行为与纯规则推断完全一致。
 
 **配置项**
 
@@ -576,12 +896,31 @@ func (c *Client) NewSessionFromRaw(raw RawIntegrationSpec, opts ...SessionOption
 |---|---|---|
 | `raw.placeholders.input` | `[$$$]` | 输入占位符列表 |
 | `raw.placeholders.session_id` | `[$$$SESSION_ID$$$]` | 会话 ID 占位符列表 |
+| `raw.inference.auto_apply_threshold` | `0.85` | `auto_confirmed` 判定阈值，低于该值进入 `pending_confirm`（仍创建 Session，附带告警报告） |
+| `raw.inference.conflict_margin` | `0.10` | 冲突判定阈值（最高分与次高分差值） |
+| `raw.inference.default_extract_event` | `message_end` | Chain 推断缺省的 SSE event 类型 |
+| `raw.inference.ai_assist.enabled` | `false` | 是否启用本地 3B（OpenAI 兼容）AI 协助分析 |
+| `raw.inference.ai_assist.base_url` | `` | 本地 OpenAI 兼容服务地址（enabled=true 时必填） |
+| `raw.inference.ai_assist.api_key` | `` | 本地 OpenAI 兼容服务鉴权密钥（enabled=true 时必填） |
+| `raw.inference.ai_assist.model` | `` | 本地 OpenAI 兼容模型名（enabled=true 时必填） |
+| `raw.inference.ai_assist.timeout_ms` | `3000` | AI 协助分析单次调用超时时间（毫秒） |
+| `raw.inference.ai_assist.max_retries` | `1` | AI 协助分析最大重试次数 |
+
+> 说明：AI 协助为可选能力，默认关闭；仅在用户显式开启（配置项或业务参数）时执行。未开启时直接采用规则推断并进入三态状态判定；开启但 AI 调用失败不阻断主流程，自动回退纯规则推断结果。启用 AI 协助时，`base_url` / `api_key` / `model` 任一缺失视为 AI 不可用，自动降级回规则阶段结果。除 SDK 内置可选 AI 辅助外，也允许业务层在 SDK 外独立执行 AI 复核（SDK 按 `auto_confirmed/pending_confirm/failed` 三态返回，`pending_confirm` 保留告警并返回 InferenceReport 供人工复核）。
 
 **异常处理**
 
 - Raw JSON 不可解析：返回字段级错误（字段路径 + 原因）
-- mode 缺失：拒绝构建，返回 `"raw: conversation.mode is required"` 错误
+- mode 缺失：拒绝构建，返回 `"generic: conversation mode is required"` 错误
 - `remote_session` 模式下找不到 session_id 占位：返回 `"raw: session_id placeholder not found in request body"` 错误
+- MultiRoundSpec 轮次不在 [2,5] 或任一轮缺失 request/response：返回 `"generic: multi_round_spec requires 2-5 rounds with request/response in each round"` 错误
+- MultiRoundSpec 任一 request/response body 不是合法 JSON：返回 `"generic: round[i].request/response body not valid JSON"` 错误
+- 占位符使用不合法（`$$$` 用于非问题/回答字段，或链路字段被替换为 `$$$`）：返回 `"raw: invalid placeholder usage"` 错误
+- 自动推断存在冲突或低置信度：返回 `pending_confirm` 报告，创建 Session 并保留告警与复核建议
+- 自动推断失败：返回 error（状态 `failed`）且不创建 Session；若 InferenceReport 可用则附带报告用于排障与回退建议，并提示回退 RawIntegrationSpec 手工模式
+- AI 协助不可用：返回 `"raw: ai assist unavailable"` 可降级告警，不直接失败（含启用 AI 协助时 `base_url` / `api_key` / `model` 任一缺失场景）
+- AI 协助超时：返回 `"raw: ai assist timeout"` 可降级告警，不直接失败
+- AI 协助重试后失败：返回 `"raw: ai assist retries exhausted"` 可降级告警，不直接失败
 - URL 为空或无法解析：返回字段级错误
 
 ---
@@ -690,6 +1029,8 @@ Save 失败处理：
 
 # 5. 关联分析
 
+> SDK 提供“MultiRound（2~5轮，默认建议3~5轮）输入 -> 最终 `request_json.json` 生成能力”，并按 `auto_confirmed/pending_confirm/failed` 三态返回结果；其中 `pending_confirm` 仍创建 Session 并返回告警报告。
+
 ### 当前代码关联影响点清单
 
 > 代码扫描基准：V2.1 设计方案，含 6 个补充点的影响范围核查。标注 🆕 的条目为本次新增。
@@ -707,6 +1048,7 @@ Save 失败处理：
 | 🆕 gzip 解压（非流式） | `provider/impls/claude/spec.go`（L78）；`provider/impls/openai/compat.go`（L81）；`provider/impls/gemini/spec.go`（L85）；`provider/impls/ollama/spec.go`（L58）；`provider/impls/dify/spec.go`（L95）；`provider/impls/plugin/spec.go`（L73） | 各处 `io.ReadAll` 直读 `resp.Body`，无 gzip 处理 | 目标模型返回 gzip 压缩响应时解析完全失败 | 抽取通用 `readResponseBody` 函数统一处理 `Content-Encoding: gzip` |
 | 🆕 gzip 解压（流式） | `provider/streaming/sse.go`（L39）；`provider/streaming/ndjson.go`（L37）；`provider/impls/dify/stream.go`（L33） | 直接读 `resp.Body`，无 gzip 处理 | 流式 gzip 响应解析失败 | 在 parser 入口前统一检测并包装 gzip.Reader |
 | 🆕 JSON 模板渲染（新增模块） | 当前代码库中不存在 | 所有 Provider 均用结构化 payload + `json.Marshal`，无 `{{input}}` 占位符渲染逻辑 | Generic Adapter 需新增模板渲染能力；`{{input}}` 替换前必须做 JSON 字符串转义 | 新增模板渲染 helper；转义规则：等价于 `json.Marshal(input)` 后去除首尾引号；单元测试覆盖引号、换行、反斜杠等特殊字符 |
+| 🆕 本地 OpenAI 兼容 AI 协助推断 | `provider/impls/generic/rawpacket.go`、`provider/impls/generic/raw.go`、`config/config.go` | 当前仅规则推断，无 AI 二阶段判别 | 新增本地 3B（OpenAI 兼容）协助冲突字段/低置信字段重排与解释；该能力可由 SDK 内置开关控制，或由业务层在 SDK 外独立实现；两种方式都必须满足审计可追踪与失败可降级 | 增加 `raw.inference.ai_assist.*` 配置；调用失败仅告警并回退规则结果；记录 AI 参与痕迹与降级原因用于审计 |
 | 🆕 HistoryWindow 裁剪 | `session/types.go`（L35）；`session/truncate.go`（L27） | `TruncatePolicy` 定义存在但从未被 Session 调用；`MaxTokens` 仅在 `GetOptions` 中定义未落地 | 历史全量加载，local_history 长会话下请求体无限增长 | 落地 `TruncatePolicy` 调用；扩展为 MaxMessages + MaxTokens 双阈值；在 Session 加载历史时裁剪 |
 | Dify Provider | `provider/impls/dify/spec.go`、`stream.go` | 通过 `req.SessionID` / `conversation_id` 传递会话 | 需适配远端会话新字段与 mode 约束；同步 gzip 与 SSE retry: 修复 | 显式使用远端会话字段；`local_history` 模式不传 `conversation_id`；同步 gzip/SSE 修复 |
 | Plugin Provider | `provider/impls/plugin/spec.go` | `session_id` 与 `startNewChat` 透传 | 需与新会话字段对齐；同步 gzip 修复 | 按 mode 控制是否透传；同步 gzip 修复 |
@@ -714,6 +1056,37 @@ Save 失败处理：
 | 文档体系 | `docs/session-guide.md` 等 | 建立在旧 `SessionID` 语义上 | 与重构设计不一致 | 全量改写会话章节；补充 JSON 转义、SSE 规范、gzip、HistoryWindow 说明 |
 | 示例代码 | `examples/`（多轮与插件示例） | `WithID` 默认等同请求会话 ID | 行为变化后会误导 | 按新接口改造，显式设置 mode；补充 OnError 与 HistoryWindow 配置示例 |
 | 测试基线 | `test/client_test.go` 等 | 断言基于旧 `SessionID` 行为 | 重构后系统性失败 | 按新语义重写断言矩阵（remote/local 两模式）；补充 gzip、SSE、HistoryWindow、OnError 场景 |
+
+### V2.7 对当前 SDK 的关联改动补充清单
+
+> 目标：把 V2.7 MultiRoundSpec（2~5轮，默认建议3~5轮）设计与当前代码实现逐项对齐。以下为最小改动集，按文件维度列出“当前状态 / 需要改动 / 风险点 / 验证点”。
+
+| 文件 | 当前状态 | 需要改动 | 风险点 | 验证点 |
+|---|---|---|---|---|
+| `client/client.go` | 已有 `NewSessionFromHTTPSpec`、`NewSessionFromRaw`，并已提供 `NewSessionFromMultiRound` / `NewSessionFromMultiRoundWithConfig` 主入口 | 保持推断入口按报告状态分流：`auto_confirmed` 创建 Session，`pending_confirm` 也创建 Session（保留告警并返回 `InferenceReport` 供人工复核），`failed` 返回错误且不创建 Session | 若静默放行低置信度结果且缺少告警复核信息，会把错误映射带到运行时 | 构造三类样例：auto_confirmed / pending_confirm / failed；分别断言返回契约与建会话行为 |
+| `client/session.go` | 已分 `remote_session/local_history/legacy`；流式首包已即时持久化 SessionID；已维护 `chainValues` | 增加“推断确认态”接入位（至少在 `SessionState.Meta` 中标识 inference_status/source/version）；`auto_confirmed` 与 `pending_confirm` 均可进入自动注入链路（`pending_confirm` 仅附带告警与复核信息）；保留手工回退路径 | 若确认态与运行态不一致，可能出现同一 session 配置漂移 | 流式中断恢复、重启恢复、pending 告警可追踪、后续轮一致性回归；校验 `Meta` 状态可追踪 |
+| `provider/impls/generic/raw.go` | 已有 `ParseRawIntegration`、占位符转换、鉴权提取；`validateChainFields` 当前仅强制 `placeholder/response_path`，`extract_on_event` 可空 | 保持 `ExtractOnEvent` 可空语义并在文档统一口径；自动推断统一只走 MultiRoundSpec（2 轮样本由业务层直接组装为 MultiRoundSpec） | 文档若继续写“必填”会与实现断层，导致接入误判为错误配置 | `extract_on_event=""` 样例（DeepSeek/OneAPI）可正常通过；非空时按 event 精准提取 |
+| `provider/impls/generic/rawpacket.go` | 已具备 HTTP 报文解析、SSE/NDJSON 自动识别、delta/remote_id 占位推断；终止事件关键词未覆盖 `close` | 新增 MultiRoundSpec（2~5轮，默认建议3~5轮）跨轮 diff 推断核心；字段分类（input/session_id/chain/dynamic/static）；冲突与置信度报告；终止事件识别补 `close` | `close` 未识别会导致 done 判定偏差；轮次样本不足时易低置信度误判 | DeepSeek `event: close` 样例回归；冲突样例进入 `pending_confirm`；缺包样例返回结构化错误 |
+| `provider/impls/generic/profile.go` | 现有 GenericProfile/StreamProfile 可承载运行时配置；无推断报告结构 | 增加 `InferredField` / `InferenceReport` / `InferredIntegration`（或等价结构）定义，固定输出契约 | 若报告结构不稳定，后续 FlowSpec 扩展会破坏兼容 | 序列化/反序列化一致性；`FlowSpecMeta{Version=v1alpha1,Source=MultiRoundSpec}` 固定输出 |
+| `provider/impls/generic/spec.go` | 已支持模板渲染、gzip、流式链路提取；`ExtractOnEvent` 为空时按“任意帧提取” | 保持与 `raw.go/rawpacket.go` 一致的事件匹配语义；确保 pending 场景按“创建 Session + 保留告警 + 返回 `InferenceReport`”运行，不做阻断式分支 | 若 pending 场景缺少告警与复核信息，可能导致低置信推断被误用 | `auto_confirmed`/`pending_confirm` 输入端到端均可用并返回对应报告；`failed` 返回错误且不创建 Session |
+| `provider/base/types.go` | `ChatRequest` 已有 `ChainValues`，`ChatResponse`/`StreamChunk` 可承接会话与链路值 | 最小增量增加可选推断元信息字段（如 inference status/source）或约定走 `Meta`；避免破坏既有 provider 接口 | 直接改核心结构若不兼容，影响全部 provider | 全 provider 编译通过；非 generic provider 行为零变更 |
+| `config/config.go` | `ProviderConfig.GenericProfile map[string]any` 可承载 generic 配置；无 typed inference 配置 | 增加 `raw.inference` 对应配置承载（阈值、conflict_margin、默认事件）；支持默认值与覆盖 | 配置入口缺失会导致阈值写死、不可审计 | 配置加载回归：默认值生效、显式覆盖生效、非法值报错 |
+| `examples/06-generic-raw/*` | 现有样例覆盖 remote/local；已出现 `extract_on_event:""` 与 `event: close` 真实样本 | 新增 MultiRoundSpec 样例（2~5轮，默认建议3~5轮）；补 pending_confirm 的“创建 Session + 告警复核”演示与手工回退演示；补 2 轮输入直接构造 MultiRoundSpec 的示例 | 示例与实现不一致会误导接入方 | 示例可直接跑通：auto_confirmed 一键接入；pending_confirm 创建 Session 且返回告警报告供人工复核；failed 回退路径可执行 |
+
+### 分阶段落地建议（Phase-1 / Phase-2）
+
+| 阶段 | 目标 | 范围 | 交付物 | 验收基线 |
+|---|---|---|---|---|
+| Phase-1 | 先打通 MultiRoundSpec（2~5轮，默认建议3~5轮）到可用报告链路，明确三态会话行为 | 实现多轮推断、字段分类、冲突检测、置信度计算；输出 `InferenceReport`；状态仅允许 `auto_confirmed/pending_confirm/failed`；其中 `auto_confirmed` 与 `pending_confirm` 均创建 Session（`pending_confirm` 保留告警并返回报告供人工复核），`failed` 返回错误且不创建 Session；提供 RawSpec 手工回退 | `InferIntegrationByMultiRound` + `InferIntegrationByMultiRoundWithConfig` + `NewSessionFromMultiRound` + `NewSessionFromMultiRoundWithConfig` + 示例与测试矩阵 | 三类样例分别满足：auto_confirmed 创建 Session；pending_confirm 创建 Session 且返回告警报告；failed 返回错误且可回退手工模式；不引入破坏性接口变更 |
+| Phase-2 | 再做确认持久化与告警治理 | 增加确认结果持久化（SessionStore/配置层）；补充审计字段（确认人、版本、时间）与失效策略；保持 Phase-1 三态建会话行为不变 | 确认态存储模型 + 告警治理策略 + 回滚/失效机制 | 重启后确认态可恢复；告警处置可追踪可回滚；审计链完整；`REQ-014 state（用户确认后再次加载同一推断结果）` 作为 Phase-2 验收项通过 |
+
+### 本轮可行性复审结论（V2.7）
+
+- 结论：**设计可行，但需先补齐“入口分流 + 报告承载 + 文档口径一致性”三处断层。**
+- 关键断层 1：`MultiRoundSpec -> Session` 主入口已落到 `client/client.go`；后续重点是三态治理（`auto_confirmed/pending_confirm/failed`）的持久化与审计闭环。
+- 关键断层 2：`InferenceReport` 尚无稳定承载结构（当前 profile/spec 仅覆盖运行态）。
+- 关键断层 3：文档中“ExtractOnEvent 必填”与当前实现（可空）不一致；建议以实现与真实样例为准，统一为“可空，空表示任意事件帧提取”。
+- 兼容性提醒：`rawpacket.go` 的终止事件识别建议补 `close`，以覆盖 DeepSeek 实际 `event: close`。
 
 ### 重构顺序建议
 
@@ -754,6 +1127,7 @@ RPN = S × O × D，≥200 为 High（上线前必须完成），100-199 为 Med
 | gzip 响应未解压 | 响应 body 乱码，解析完全失败 | 未检查 Content-Encoding | 6 | 4 | 3 | 72 | Low | HTTP 层自动检测 Content-Encoding: gzip 并解压 | SDK开发者 | V2.0 | 待实现 |
 | RemoteID 进程重启后丢失 | 续轮变成新会话，上下文断裂 | 仅存内存未落库 | 8 | 5 | 4 | 160 | Medium | 每轮响应后立即持久化 RemoteID 到 SessionStore | SDK开发者 | V2.0 | 待实现 |
 | Raw 解析失败 | 新接入不可用 | 报文不完整或字段异常 | 6 | 5 | 3 | 90 | Low | 返回结构化错误（字段路径 + 原因） | SDK开发者 | V2.0 | 待实现 |
+| MultiRound 低置信度误判 | 错误映射被用于线上请求，导致会话串线或上下文错乱 | 多轮样本信息不足、字段同值冲突、推断规则命中歧义 | 8 | 5 | 5 | 200 | High | 强制输出字段级置信度；低于阈值进入 `pending_confirm`（仍创建 Session 并返回告警报告）；`failed` 返回错误且不创建 Session；一键回退 RawSpec 手工模式；上线前补充冲突样本回归集 | SDK开发者 | V2.7 | 待实现 |
 | 鉴权冲突 | 401 / 403 | 同时出现多套认证信息 | 7 | 4 | 5 | 140 | Medium | 鉴权冲突直接失败，不自动猜测；日志脱敏处理 | SDK开发者 | V2.0 | 待实现 |
 
 ---
@@ -794,11 +1168,31 @@ RPN = S × O × D，≥200 为 High（上线前必须完成），100-199 为 Med
 | REQ-009 | 单元测试 | OnError=abort，单轮失败 | 立即终止，返回错误 |
 | REQ-010 | 单元测试 | MaxMessages=3，历史有 10 条 | 仅携带最近 3 条历史 |
 | REQ-010 | 单元测试 | MaxTokens=100，历史估算超限 | 裁剪至 Token 阈值以内 |
-| REQ-011 | 单元测试 | ChainFields 列表非空，某条 ExtractOnEvent 为空 | 初始化报错，拒绝构建 |
+| REQ-011 | 单元测试 | ChainFields 列表非空，某条 ExtractOnEvent 为空 | 允许通过，空表示按任意事件帧提取 |
 | REQ-011 | 单元测试 | ChainFields 列表非空，占位符格式不符合 $$$NAME$$$ | 初始化报错 |
 | REQ-011 | 单元测试 | 首轮流式响应 message_end 含 message_id，第二轮请求体含 parent_message_id | parent_message_id 正确注入提取值 |
 | REQ-011 | 单元测试 | 首轮响应中 ExtractOnEvent 不匹配（event 类型不同） | 该链路字段不提取，第二轮对应字段被移除 |
 | REQ-011 | 单元测试 | 多个 ChainField 同时配置 | 各字段独立提取，互不干扰 |
+| REQ-012 | 单元测试 | happy path：MultiRoundSpec 提供完整 2~5 轮请求与响应（默认建议3~5轮） | 成功生成 `GenericProfile + InferenceReport`，状态为 `auto_confirmed` 或 `pending_confirm` |
+| REQ-012 | 单元测试 | edge：2~5 轮报文包含无关字段与字段顺序变化 | 推断结果不受顺序影响，无关字段不进入关键映射 |
+| REQ-012 | 单元测试 | error：轮次数 <2 或 >5，或任一轮缺失 request/response | 返回 `"generic: multi_round_spec requires 2-5 rounds with request/response in each round"` 错误 |
+| REQ-012 | 单元测试 | state：同一 MultiRoundSpec（含 2 轮输入场景）重复推断两次 | 输出字段分类与置信度稳定（可复现） |
+| REQ-013 | 单元测试 | happy path：可同时识别 input/session_id/chain/dynamic/static | 五类字段均被正确分类并写入报告 |
+| REQ-013 | 单元测试 | edge：同一路径存在多分类候选（同值冲突） | 报告标记冲突并进入确认流程 |
+| REQ-013 | 单元测试 | error：请求或响应 Body 非法 JSON | 返回字段级解析错误，状态 `failed` |
+| REQ-013 | 单元测试 | state：timestamp/nonce 在两轮变化 | 字段被归类为 `dynamic`，不被固化为 static |
+| REQ-014 | 单元测试 | happy path：OverallConfidence 高于阈值且无冲突 | 报告状态 `auto_confirmed`，创建 Session |
+| REQ-014 | 单元测试 | edge：OverallConfidence 恰好等于阈值 | 报告状态 `auto_confirmed`，创建 Session |
+| REQ-014 | 单元测试 | error：OverallConfidence 低于阈值 | 报告状态 `pending_confirm`，仍创建 Session 且返回告警与 InferenceReport |
+| REQ-014 | 单元测试 | state（Phase-2 验收：确认态持久化）：用户确认后再次加载同一推断结果 | 状态保持为已确认，不重复触发确认流程（Phase-1 不要求） |
+| REQ-015 | 单元测试 | happy path：自动推断失败后切换 RawSpec 手工模式 | 手工模式可成功编译并创建 Session |
+| REQ-015 | 单元测试 | edge：仅部分字段推断失败 | 允许保留可用结果并进入手工补全流程 |
+| REQ-015 | 单元测试 | error：推断失败且未提供手工回退配置 | 返回明确错误并给出回退提示 |
+| REQ-015 | 单元测试 | state：回退成功后继续多轮会话 | 会话状态可持续推进，无额外分支错误 |
+| REQ-016 | 单元测试 | happy path：自动推断结果包含 FlowSpecMeta | `FlowSpecMeta.Version=v1alpha1` 且 `Source=MultiRoundSpec` |
+| REQ-016 | 单元测试 | edge：存在未来扩展字段（unknown extension） | 保持透传，不影响当前解析 |
+| REQ-016 | 单元测试 | error：FlowSpecMeta.Version 缺失 | 校验失败并返回结构化错误 |
+| REQ-016 | 单元测试 | state：推断结果序列化/反序列化后再编译 | GenericProfile 与报告关键字段保持一致 |
 
 ## 8.2. 测试要求
 
@@ -831,3 +1225,6 @@ RPN = S × O × D，≥200 为 High（上线前必须完成），100-199 为 Med
 | V2.4 | 徐文彬 | 2026-03-06 | 补充 isDifyProvider 特判影响点；补充 Test()/TestWith() mode 校验豁免策略（惰性校验） |
 | V2.5 | 徐文彬 | 2026-03-06 | 补充流式/非流式响应影响分析：Chat() 需按 mode 控制注入与提取；ChatStream() 额外需在首个 chunk 提取到 SessionID 时立即持久化（不等流结束），修复流中断时 SessionID 丢失问题；3.4 新增流式与非流式行为差异对比表 |
 | V2.6 | 徐文彬 | 2026-03-07 | 新增 REQ-011 ChainFields 多轮字段链路传递：新增 ChainField 结构体（Placeholder/ResponsePath/ExtractOnEvent 三字段，传了则全部必填）；GenericProfile.Stream 新增 ChainFields；RawIntegrationSpec 新增 ChainFields；ChatRequest/StreamChunk 新增 ChainValues；Session 内部新增 chainValues 状态；3.4/3.5/3.6 内部逻辑同步更新；补充 REQ-011 测试矩阵 5 条 |
+| V2.7 | 徐文彬 | 2026-03-08 | 新增 MultiRoundSpec（2~5轮，默认建议3~5轮）自动推断设计：补充 REQ-012~REQ-016；3.6 增加多轮推断数据结构、字段分类规则（input/session_id/chain/dynamic/static）、冲突与置信度确认流程、失败回退手工模式、前向兼容 FlowSpec 的输出契约（GenericProfile + InferenceReport）；补充 FMEA 与测试矩阵 |
+| V2.8 | 徐文彬 | 2026-03-08 | 文档同步当前实现：移除双轮独立方案描述与相关 API/示例；统一为仅保留 MultiRound 自动推断；接入口径改为“业务层直接以 2 轮数据构造 MultiRoundSpec”。 |
+| V2.9 | 徐文彬 | 2026-03-09 | 全文统一三态会话口径：`auto_confirmed` 创建 Session；`pending_confirm` 也创建 Session（保留告警并返回 InferenceReport 供人工复核）；`failed` 返回 error 且不创建 Session；同步更新流程、异常、Phase、FMEA、测试矩阵。 |
