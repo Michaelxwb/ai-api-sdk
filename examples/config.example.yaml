@@ -83,6 +83,30 @@ providers:
     #     var1: "value1"
     #   user: "custom-user-id"
 
+  # FastGPT (local_history mode: set via WithConversationMode() when creating session)
+  - name: "fastgpt_local"
+    type: "fastgpt"
+    base_url: "https://api.fastgpt.in"
+    path: "/api/v1/chat/completions"
+    auth_ref: "fastgpt_key"
+    extra_body:
+      detail: true
+      variables:
+        team: "demo"
+        channel: "examples"
+
+  # FastGPT (remote_session mode: set via WithConversationMode() when creating session)
+  - name: "fastgpt_remote"
+    type: "fastgpt"
+    base_url: "https://api.fastgpt.in"
+    path: "/api/v1/chat/completions"
+    auth_ref: "fastgpt_key"
+    extra_body:
+      detail: true
+      variables:
+        team: "demo"
+        channel: "examples"
+
 # Credentials (referenced by providers[].auth_ref).
 credentials:
   - id: "none"
@@ -132,3 +156,8 @@ credentials:
     provider: "dify"
     auth_type: "api_key"
     api_key: "app-59zRGqk6BMwGkKz3HWLIezvi"
+
+  - id: "fastgpt_key"
+    provider: "fastgpt"
+    auth_type: "api_key"
+    api_key: "fastgpt-TOKEN"
