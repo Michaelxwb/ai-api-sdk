@@ -107,6 +107,14 @@ providers:
         team: "demo"
         channel: "examples"
 
+  # RAGFlow (chat_id is required in extra_body, it identifies the Chat Assistant)
+  - name: "ragflow"
+    type: "ragflow"
+    base_url: "http://ragflow.example.com"  # 自建 RAGFlow 地址
+    auth_ref: "ragflow_key"
+    extra_body:
+      chat_id: "your-chat-assistant-id"  # 必填：RAGFlow Chat Assistant ID
+
 # Credentials (referenced by providers[].auth_ref).
 credentials:
   - id: "none"
@@ -161,3 +169,8 @@ credentials:
     provider: "fastgpt"
     auth_type: "api_key"
     api_key: "fastgpt-TOKEN"
+
+  - id: "ragflow_key"
+    provider: "ragflow"
+    auth_type: "api_key"
+    api_key: "ragflow-TOKEN"

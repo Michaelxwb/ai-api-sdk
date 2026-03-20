@@ -41,6 +41,9 @@ type Session struct {
 	// historyWindow 定义本地历史裁剪窗口。
 	historyWindow HistoryWindow
 
+	// timeout 对话超时时间，0 表示使用 Client.HTTP.Timeout 默认值
+	timeout time.Duration
+
 	// 内部状态
 	mu          sync.Mutex
 	initialized bool
@@ -125,8 +128,24 @@ func WithHistoryWindow(hw HistoryWindow) SessionOption {
 	}
 }
 
+// WithTimeout 设置对话请求的超时时间，应用于 Chat 和 ChatStream。
+// 0 或不设置时使用 Client.HTTP.Timeout 默认值（60s）。
+func WithTimeout(d time.Duration) SessionOption {
+	return func(s *Session) {
+		s.timeout = d
+	}
+}
+
 // Chat 发送非流式对话请求
 func (s *Session) Chat(ctx context.Context, req base.ChatRequest) (base.ChatResponse, error) {
+	if s.timeout > 0 {
+		if _, ok := ctx.Deadline(); !ok {
+			var cancel context.CancelFunc
+			ctx, cancel = context.WithTimeout(ctx, s.timeout)
+			defer cancel()
+		}
+	}
+
 	startNewChat := req.StartNewChat || s.startNewChat
 
 	switch s.conversationMode {
@@ -383,6 +402,15 @@ func (s *Session) truncateHistory(msgs []base.Message) []base.Message {
 
 // ChatStream 发送流式对话请求
 func (s *Session) ChatStream(ctx context.Context, req base.ChatRequest) (<-chan streaming.StreamChunk, error) {
+	if s.timeout > 0 {
+		if _, ok := ctx.Deadline(); !ok {
+			// 只设 deadline，不在此 defer cancel。
+			// chatWithStream 内部检测到 ctx 已有 deadline 后不会再覆盖，
+			// 其 goroutine 会在 stream 关闭时负责清理。
+			ctx, _ = context.WithTimeout(ctx, s.timeout)
+		}
+	}
+
 	startNewChat := req.StartNewChat || s.startNewChat
 
 	switch s.conversationMode {

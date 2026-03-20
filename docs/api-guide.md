@@ -62,6 +62,23 @@ func (c *Client) NewSessionWith(cred *auth.Credential, pc *config.ProviderConfig
 - `NewSession` 使用配置文件中的 Provider + Manager 解析凭证，并创建会话对象
 - `NewSessionWith` 直接传入凭证与 Provider 配置，适合平台集成
 
+### SessionOption
+
+| Option | 说明 |
+|--------|------|
+| `WithID(id)` | 指定 SessionID |
+| `WithAutoID()` | 自动生成 SessionID |
+| `WithStore(store)` | 配置 SessionStore |
+| `WithHistoryMode(mode)` | 设置历史加载模式 |
+| `WithMeta(kv)` | 设置自定义元数据 |
+| `WithStartNewChat(bool)` | 每次开启新对话 |
+| `WithConversationMode(mode)` | 设置会话模式（`remote_session` / `local_history`） |
+| `WithOnError(strategy)` | 设置错误处理策略 |
+| `WithHistoryWindow(hw)` | 设置本地历史裁剪窗口 |
+| `WithTimeout(d)` | 设置对话超时时间，应用于 `Chat` 和 `ChatStream` |
+
+**超时优先级**：`ctx` 自带 deadline > `WithTimeout` > 默认值（Chat 60s，ChatStream 5min）
+
 ## 4. Session API（Chat, ChatStream, ID）
 
 `Session` 负责管理会话上下文与多轮对话，统一通过以下方法调用：
@@ -235,9 +252,46 @@ type AuthStrategy interface {
 
 ## 7. 错误处理
 
-- **请求错误**：检查 `err` 返回值（HTTP 错误、鉴权失败、网络中断）。
-- **流式错误**：流式接口的错误在 `StreamChunk.Error` 中逐段传递。
-- **会话错误**：存储层可能返回 `ErrSessionNotFound` / `ErrSessionConflict`。
+SDK 定义了三个结构化错误类型，调用方通过 `errors.As` 区分不同错误场景。
+
+### 错误类型
+
+| 类型 | 字段 | 说明 |
+|------|------|------|
+| `*client.APIError` | `StatusCode int`, `Body string`, `Op string` | AI Provider 返回非 2xx HTTP 响应。`Body` 最多 4KB，超出部分截断。 |
+| `*client.ParseError` | `Provider string`, `Err error` | Provider 响应解析失败（如 JSON 格式异常）。可通过 `Unwrap()` 获取底层错误。 |
+| `*client.AuthError` | `Op string`, `Err error` | 认证相关错误（凭证缺失、OAuth 刷新失败等）。可通过 `Unwrap()` 获取底层错误。 |
+
+网络层错误（连接超时、DNS 失败、TLS 握手等）不做额外包装，直接透传标准库原始错误。
+
+### 错误处理示例
+
+```go
+import "errors"
+
+resp, err := session.Chat(ctx, req)
+if err != nil {
+    var apiErr *client.APIError
+    var authErr *client.AuthError
+
+    switch {
+    case errors.As(err, &authErr):
+        // 认证失败：提示用户检查或更新凭证
+        log.Printf("认证失败 [%s]: %v", authErr.Op, authErr.Unwrap())
+    case errors.As(err, &apiErr):
+        // Provider 返回错误：可按状态码决定重试策略
+        log.Printf("API 错误 HTTP %d: %s", apiErr.StatusCode, apiErr.Body)
+    default:
+        // 网络错误或解析错误：统一处理
+        log.Printf("请求失败: %v", err)
+    }
+    return
+}
+```
+
+### 流式错误
+
+流式接口的错误通过 `StreamChunk.Error` 传递，错误类型与非流式一致，同样使用 `errors.As` 处理。
 
 ## 8. 最佳实践
 
