@@ -162,6 +162,21 @@ func (s *GenericSpec) ParseResponse(resp *http.Response) (base.ChatResponse, err
 		}
 	}
 
+	// Extract chain values (reuse stream chain field definitions)
+	chainFields := s.profile.Response.Stream.ChainFields
+	if len(chainFields) > 0 {
+		cv := make(map[string]string)
+		for _, cf := range chainFields {
+			val, err := streaming.ExtractJSONPath(data, cf.ResponsePath)
+			if err == nil && val != "" {
+				cv[cf.Placeholder] = val
+			}
+		}
+		if len(cv) > 0 {
+			result.ChainValues = cv
+		}
+	}
+
 	return result, nil
 }
 

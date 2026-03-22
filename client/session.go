@@ -175,9 +175,25 @@ func (s *Session) chatRemoteSession(ctx context.Context, req base.ChatRequest, s
 		req.SessionID = s.id
 	}
 
+	// Inject chain values from previous turn
+	if !startNewChat {
+		s.mu.Lock()
+		if len(s.chainValues) > 0 {
+			req.ChainValues = s.chainValues
+		}
+		s.mu.Unlock()
+	}
+
 	resp, err := s.doChat(ctx, req)
 	if err != nil {
 		return base.ChatResponse{}, err
+	}
+
+	// Extract and persist chain values from response
+	if len(resp.ChainValues) > 0 {
+		s.mu.Lock()
+		s.chainValues = resp.ChainValues
+		s.mu.Unlock()
 	}
 
 	// Extract remote session_id from response (always update to use server-provided ID)
@@ -213,12 +229,25 @@ func (s *Session) chatLocalHistory(ctx context.Context, req base.ChatRequest, st
 		s.mu.Unlock()
 	}
 
-	// Load and truncate history
+	// Load history and restore chain values
 	var historyMsgs []base.Message
 	if !startNewChat && s.mode == HistoryAuto && s.store != nil && s.id != "" {
 		state, err := s.store.Get(ctx, s.id)
 		if err == nil && state != nil {
 			historyMsgs = state.Messages
+			// Restore persisted chain values (if not already set in memory)
+			if state.Meta != nil {
+				if chainJSON, ok := state.Meta["chain_values"]; ok && chainJSON != "" {
+					var cv map[string]string
+					if jsonErr := json.Unmarshal([]byte(chainJSON), &cv); jsonErr == nil {
+						s.mu.Lock()
+						if len(s.chainValues) == 0 {
+							s.chainValues = cv
+						}
+						s.mu.Unlock()
+					}
+				}
+			}
 		}
 	}
 
@@ -227,10 +256,31 @@ func (s *Session) chatLocalHistory(ctx context.Context, req base.ChatRequest, st
 		historyMsgs = s.truncateHistory(historyMsgs)
 	}
 
-	// Merge history with current messages
+	// Merge history with current messages (safe copy to avoid mutating store data)
 	if !startNewChat && len(historyMsgs) > 0 {
-		allMsgs := append(historyMsgs, req.Messages...)
+		allMsgs := make([]base.Message, 0, len(historyMsgs)+len(req.Messages))
+		allMsgs = append(allMsgs, historyMsgs...)
+		allMsgs = append(allMsgs, req.Messages...)
 		req.Messages = allMsgs
+	}
+
+	// Tool call ID conversion + chain values injection
+	if !startNewChat {
+		s.mu.Lock()
+		prevChain := s.chainValues
+		s.mu.Unlock()
+		if toolCallID, ok := prevChain["$$$TOOL_CALL_ID$$$"]; ok && toolCallID != "" {
+			for i := len(req.Messages) - 1; i >= 0; i-- {
+				if strings.EqualFold(req.Messages[i].Role, "user") {
+					req.Messages[i].Role = "tool"
+					req.Messages[i].ToolCallID = toolCallID
+					break
+				}
+			}
+		}
+		if len(prevChain) > 0 {
+			req.ChainValues = prevChain
+		}
 	}
 
 	// Do NOT inject session_id for local_history mode
@@ -239,6 +289,13 @@ func (s *Session) chatLocalHistory(ctx context.Context, req base.ChatRequest, st
 	resp, err := s.doChat(ctx, req)
 	if err != nil {
 		return base.ChatResponse{}, err
+	}
+
+	// Extract chain values from response
+	if len(resp.ChainValues) > 0 {
+		s.mu.Lock()
+		s.chainValues = resp.ChainValues
+		s.mu.Unlock()
 	}
 
 	// Save to store
@@ -269,9 +326,11 @@ func (s *Session) chatLegacy(ctx context.Context, req base.ChatRequest, startNew
 		}
 	}
 
-	// 3. Merge messages
+	// 3. Merge messages (safe copy to avoid mutating store data)
 	if !startNewChat {
-		allMsgs := append(historyMsgs, req.Messages...)
+		allMsgs := make([]base.Message, 0, len(historyMsgs)+len(req.Messages))
+		allMsgs = append(allMsgs, historyMsgs...)
+		allMsgs = append(allMsgs, req.Messages...)
 		req.Messages = allMsgs
 	}
 
@@ -334,10 +393,16 @@ func (s *Session) saveState(ctx context.Context, req base.ChatRequest, resp base
 	if sessionID == "" {
 		return
 	}
-	newMsgs := append(req.Messages, base.Message{
+	// Safe copy to avoid mutating caller's slice
+	newMsgs := make([]base.Message, len(req.Messages), len(req.Messages)+1)
+	copy(newMsgs, req.Messages)
+	newMsgs = append(newMsgs, base.Message{
 		Role:    "assistant",
 		Content: resp.Text,
 	})
+
+	// Apply truncation before saving
+	newMsgs = s.truncateHistory(newMsgs)
 
 	state := &session.SessionState{
 		ID:        sessionID,
@@ -346,7 +411,7 @@ func (s *Session) saveState(ctx context.Context, req base.ChatRequest, resp base
 		UpdatedAt: time.Now(),
 	}
 
-	m := make(map[string]string, len(s.meta)+3)
+	m := make(map[string]string, len(s.meta)+5)
 	for k, v := range s.meta {
 		m[k] = v
 	}
@@ -358,6 +423,15 @@ func (s *Session) saveState(ctx context.Context, req base.ChatRequest, resp base
 	}
 	if s.onError != "" {
 		m["on_error"] = string(s.onError)
+	}
+	// Persist chain values for cross-session restore
+	s.mu.Lock()
+	cv := s.chainValues
+	s.mu.Unlock()
+	if len(cv) > 0 {
+		if chainJSON, jsonErr := json.Marshal(cv); jsonErr == nil {
+			m["chain_values"] = string(chainJSON)
+		}
 	}
 	if len(m) > 0 {
 		state.Meta = m
@@ -402,25 +476,47 @@ func (s *Session) truncateHistory(msgs []base.Message) []base.Message {
 
 // ChatStream 发送流式对话请求
 func (s *Session) ChatStream(ctx context.Context, req base.ChatRequest) (<-chan streaming.StreamChunk, error) {
+	var cancel context.CancelFunc
 	if s.timeout > 0 {
 		if _, ok := ctx.Deadline(); !ok {
-			// 只设 deadline，不在此 defer cancel。
-			// chatWithStream 内部检测到 ctx 已有 deadline 后不会再覆盖，
-			// 其 goroutine 会在 stream 关闭时负责清理。
-			ctx, _ = context.WithTimeout(ctx, s.timeout)
+			ctx, cancel = context.WithTimeout(ctx, s.timeout)
 		}
 	}
 
 	startNewChat := req.StartNewChat || s.startNewChat
 
+	var rawCh <-chan streaming.StreamChunk
+	var err error
 	switch s.conversationMode {
 	case ConversationModeRemoteSession:
-		return s.chatStreamRemoteSession(ctx, req, startNewChat)
+		rawCh, err = s.chatStreamRemoteSession(ctx, req, startNewChat)
 	case ConversationModeLocalHistory:
-		return s.chatStreamLocalHistory(ctx, req, startNewChat)
+		rawCh, err = s.chatStreamLocalHistory(ctx, req, startNewChat)
 	default:
-		return s.chatStreamLegacy(ctx, req, startNewChat)
+		rawCh, err = s.chatStreamLegacy(ctx, req, startNewChat)
 	}
+
+	if err != nil {
+		if cancel != nil {
+			cancel()
+		}
+		return nil, err
+	}
+
+	// If we created a timeout context, wrap channel to cancel when stream ends
+	if cancel != nil {
+		out := make(chan streaming.StreamChunk, 16)
+		go func() {
+			defer cancel()
+			defer close(out)
+			for chunk := range rawCh {
+				out <- chunk
+			}
+		}()
+		return out, nil
+	}
+
+	return rawCh, nil
 }
 
 func (s *Session) chatStreamRemoteSession(ctx context.Context, req base.ChatRequest, startNewChat bool) (<-chan streaming.StreamChunk, error) {
@@ -519,6 +615,8 @@ func (s *Session) chatStreamRemoteSession(ctx context.Context, req base.ChatRequ
 				Role:    "assistant",
 				Content: fullText,
 			})
+			// Truncate history before saving
+			allMsgs = s.truncateHistory(allMsgs)
 			state := &session.SessionState{
 				ID:        sessionID,
 				Provider:  s.provider,
@@ -584,7 +682,9 @@ func (s *Session) chatStreamLocalHistory(ctx context.Context, req base.ChatReque
 		historyMsgs = s.truncateHistory(historyMsgs)
 	}
 	if !startNewChat && len(historyMsgs) > 0 {
-		allMsgs := append(historyMsgs, req.Messages...)
+		allMsgs := make([]base.Message, 0, len(historyMsgs)+len(req.Messages))
+		allMsgs = append(allMsgs, historyMsgs...)
+		allMsgs = append(allMsgs, req.Messages...)
 		req.Messages = allMsgs
 	}
 
@@ -649,7 +749,10 @@ func (s *Session) chatStreamLocalHistory(ctx context.Context, req base.ChatReque
 
 		sessionID := s.ID()
 		if !startNewChat && s.store != nil && sessionID != "" {
-			newMsgs := append(req.Messages, base.Message{
+			// Safe copy to avoid mutating req.Messages' backing array
+			newMsgs := make([]base.Message, len(req.Messages), len(req.Messages)+1)
+			copy(newMsgs, req.Messages)
+			newMsgs = append(newMsgs, base.Message{
 				Role:    "assistant",
 				Content: fullText,
 			})
@@ -707,9 +810,11 @@ func (s *Session) chatStreamLegacy(ctx context.Context, req base.ChatRequest, st
 		}
 	}
 
-	// 3. Merge messages
+	// 3. Merge messages (safe copy to avoid mutating store data)
 	if !startNewChat {
-		allMsgs := append(historyMsgs, req.Messages...)
+		allMsgs := make([]base.Message, 0, len(historyMsgs)+len(req.Messages))
+		allMsgs = append(allMsgs, historyMsgs...)
+		allMsgs = append(allMsgs, req.Messages...)
 		req.Messages = allMsgs
 	}
 
@@ -758,7 +863,10 @@ func (s *Session) chatStreamLegacy(ctx context.Context, req base.ChatRequest, st
 
 		sessionID := s.ID()
 		if !startNewChat && s.store != nil && sessionID != "" {
-			newMsgs := append(req.Messages, base.Message{
+			// Safe copy to avoid mutating req.Messages' backing array
+			newMsgs := make([]base.Message, len(req.Messages), len(req.Messages)+1)
+			copy(newMsgs, req.Messages)
+			newMsgs = append(newMsgs, base.Message{
 				Role:    "assistant",
 				Content: fullText,
 			})

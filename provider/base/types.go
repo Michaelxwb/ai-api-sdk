@@ -42,6 +42,9 @@ type ChatResponse struct {
 	//   - remote_session: 远端服务返回的会话标识，客户端应提取并持久化以供续轮使用
 	//   - local_history:  无实际意义，不使用
 	SessionID string
-	Usage     *Usage
-	Raw       []byte
+	// ChainValues 携带从响应中提取的链路字段值（非流式模式）。
+	// 流式模式下通过 StreamChunk.ChainValues 传递。
+	ChainValues map[string]string
+	Usage       *Usage
+	Raw         []byte
 }

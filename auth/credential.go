@@ -33,6 +33,18 @@ type Credential struct {
 	Metadata     map[string]any    `json:"metadata,omitempty" yaml:"metadata,omitempty"`
 }
 
+// NewCredential creates a Credential with automatic AuthType inference.
+// Non-empty apiKey implies AuthTypeAPIKey; otherwise AuthTypeNone.
+func NewCredential(provider, apiKey string) *Credential {
+	c := &Credential{Provider: provider, APIKey: apiKey}
+	if apiKey != "" {
+		c.AuthType = AuthTypeAPIKey
+	} else {
+		c.AuthType = AuthTypeNone
+	}
+	return c
+}
+
 func (c *Credential) IsExpired(now time.Time) bool {
 	if c == nil || c.ExpiresAt == nil {
 		return false

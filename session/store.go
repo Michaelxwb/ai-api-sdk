@@ -3,6 +3,7 @@ package session
 import (
 	"context"
 	"errors"
+	"sync"
 )
 
 // SessionStore defines the minimal interface for session storage.
@@ -16,6 +17,40 @@ type SessionStore interface {
 // SessionStoreAppender is an optional extension for message appends.
 type SessionStoreAppender interface {
 	Append(ctx context.Context, id string, msgs ...Message) error
+}
+
+// NewMemoryStore returns a built-in in-memory session store. It is concurrency-safe.
+func NewMemoryStore() SessionStore {
+	return &memoryStore{data: make(map[string]*SessionState)}
+}
+
+type memoryStore struct {
+	mu   sync.RWMutex
+	data map[string]*SessionState
+}
+
+func (m *memoryStore) Get(_ context.Context, id string) (*SessionState, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	state, ok := m.data[id]
+	if !ok {
+		return nil, ErrSessionNotFound
+	}
+	return state, nil
+}
+
+func (m *memoryStore) Save(_ context.Context, state *SessionState) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.data[state.ID] = state
+	return nil
+}
+
+func (m *memoryStore) Delete(_ context.Context, id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.data, id)
+	return nil
 }
 
 var (

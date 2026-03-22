@@ -15,6 +15,26 @@ const (
 	ConversationModeLocalHistory ConversationMode = "local_history"
 )
 
+// ResolveConversationMode returns the default conversation mode for a provider.
+// Callers should prefer an explicitly specified mode over this default.
+func ResolveConversationMode(provider string) ConversationMode {
+	switch provider {
+	case "openai", "claude", "gemini", "ollama",
+		"deepseek", "moonshot", "dashscope", "volcengine", "openai_compat":
+		return ConversationModeLocalHistory
+	case "dify", "ragflow":
+		return ConversationModeRemoteSession
+	default: // fastgpt, generic, plugin, etc.
+		return ""
+	}
+}
+
+// ResolveDefaultStream returns the default streaming mode for a provider.
+// Currently all registered providers support streaming, so this always returns true.
+func ResolveDefaultStream(provider string) bool {
+	return true
+}
+
 // OnErrorStrategy defines how multi-turn errors are handled.
 type OnErrorStrategy string
 
