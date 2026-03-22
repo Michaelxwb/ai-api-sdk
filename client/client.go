@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"io"
 	"net/http"
 	"time"
@@ -9,6 +10,7 @@ import (
 	"github.com/Michaelxwb/ai-api-sdk/auth"
 	"github.com/Michaelxwb/ai-api-sdk/config"
 	"github.com/Michaelxwb/ai-api-sdk/provider/base"
+	"github.com/Michaelxwb/ai-api-sdk/provider/impls/generic"
 	"github.com/Michaelxwb/ai-api-sdk/session"
 )
 
@@ -106,4 +108,151 @@ func (c *Client) chatWith(ctx context.Context, cred *auth.Credential, pc *config
 		return base.ChatResponse{}, &APIError{StatusCode: resp.StatusCode, Body: bodyStr, Op: "chat"}
 	}
 	return prep.spec.ParseResponse(resp)
+}
+
+// NewSessionFromHTTPSpec 从业务层五字段原始 HTTP 报文格式创建会话。
+// 相较于 NewSessionFromRaw，调用方无需了解 SDK 内部的 RawIntegrationSpec 结构，
+// 只需传入从浏览器/抓包工具获取的原始请求和响应文本即可。
+func (c *Client) NewSessionFromHTTPSpec(spec generic.RawHTTPSpec, opts ...SessionOption) (*Session, error) {
+	raw, err := generic.ParseHTTPSpec(spec)
+	if err != nil {
+		return nil, err
+	}
+	return c.NewSessionFromRaw(raw, opts...)
+}
+
+// NewSessionFromRaw creates a session from a raw integration spec for non-standard API providers.
+// It compiles the spec into a GenericProfile, extracts credentials, and configures conversation mode.
+func (c *Client) NewSessionFromRaw(raw generic.RawIntegrationSpec, opts ...SessionOption) (*Session, error) {
+	compiled, err := generic.ParseRawIntegration(raw)
+	if err != nil {
+		return nil, err
+	}
+
+	// Register a per-instance GenericSpec with the compiled profile
+	spec := generic.NewGenericSpec(compiled.Profile)
+
+	// Create a unique spec name to avoid collisions
+	specName := "generic"
+	if raw.Name != "" {
+		specName = "generic_" + raw.Name
+	}
+	base.Register(specName, spec)
+
+	pc := &config.ProviderConfig{
+		Name:    specName,
+		Type:    specName,
+		BaseURL: compiled.BaseURL,
+		Headers: compiled.ExtraHeaders,
+	}
+
+	// Determine conversation mode
+	var convMode ConversationMode
+	switch compiled.Profile.Conversation.Mode {
+	case "remote_session":
+		convMode = ConversationModeRemoteSession
+	case "local_history":
+		convMode = ConversationModeLocalHistory
+	}
+
+	sess := c.NewSessionWith(compiled.Credential, pc, opts...)
+	sess.conversationMode = convMode
+
+	return sess, nil
+}
+
+// NewSessionFromMultiRound creates a session from a MultiRoundSpec using auto-inference.
+// If inference status is "auto_confirmed" or "pending_confirm", creates and returns a session.
+// If inference status is "failed", returns an error with fallback suggestion.
+func (c *Client) NewSessionFromMultiRound(spec generic.MultiRoundSpec, opts ...SessionOption) (*Session, *generic.InferredIntegration, error) {
+	inferred, err := generic.InferIntegrationByMultiRound(spec)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return c.sessionFromInferred(inferred, opts...)
+}
+
+// NewSessionFromHTTPMultiRound creates a session from raw HTTP request/response packets (2~5 rounds).
+// SDK will parse raw packets into MultiRoundSpec internally, then run auto-inference.
+func (c *Client) NewSessionFromHTTPMultiRound(spec generic.RawHTTPMultiRoundSpec, opts ...SessionOption) (*Session, *generic.InferredIntegration, error) {
+	multi, err := generic.ParseHTTPMultiRoundSpec(spec)
+	if err != nil {
+		return nil, nil, err
+	}
+	return c.NewSessionFromMultiRound(multi, opts...)
+}
+
+// NewSessionFromMultiRoundWithConfig creates a session with custom inference thresholds.
+func (c *Client) NewSessionFromMultiRoundWithConfig(spec generic.MultiRoundSpec, cfg generic.InferenceConfig, opts ...SessionOption) (*Session, *generic.InferredIntegration, error) {
+	inferred, err := generic.InferIntegrationByMultiRoundWithConfig(spec, cfg)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return c.sessionFromInferred(inferred, opts...)
+}
+
+// NewSessionFromTwoRound is a backward-compatible entry point for 2-round inference.
+func (c *Client) NewSessionFromTwoRound(spec generic.TwoRoundSpec, opts ...SessionOption) (*Session, *generic.InferredIntegration, error) {
+	inferred, err := generic.InferIntegrationByTwoRound(spec)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	return c.sessionFromInferred(inferred, opts...)
+}
+
+// sessionFromInferred creates a session from an InferredIntegration result.
+// Returns (session, inferred, nil) on auto_confirmed and pending_confirm.
+// pending_confirm is preserved in inferred.Report.Status for caller-side warning display.
+// Returns (nil, inferred, error) on failed.
+func (c *Client) sessionFromInferred(inferred *generic.InferredIntegration, opts ...SessionOption) (*Session, *generic.InferredIntegration, error) {
+	if inferred.Report == nil {
+		return nil, inferred, fmt.Errorf("client: inference produced no report")
+	}
+
+	switch inferred.Report.Status {
+	case "failed":
+		return nil, inferred, fmt.Errorf("client: inference failed, use RawIntegrationSpec for manual configuration")
+	case "auto_confirmed", "pending_confirm":
+		// Proceed to create session; pending_confirm remains a warning-only status.
+	default:
+		return nil, inferred, fmt.Errorf("client: unknown inference status %q", inferred.Report.Status)
+	}
+
+	if inferred.Profile == nil {
+		return nil, inferred, fmt.Errorf("client: inference produced no profile")
+	}
+
+	spec := generic.NewGenericSpec(*inferred.Profile)
+	specName := "generic_inferred"
+	base.Register(specName, spec)
+
+	pc := &config.ProviderConfig{
+		Name:    specName,
+		Type:    specName,
+		BaseURL: inferred.BaseURL,
+		Headers: inferred.ExtraHeaders,
+	}
+
+	var cred *auth.Credential
+	if inferred.Credential != nil {
+		if c, ok := inferred.Credential.(*auth.Credential); ok {
+			cred = c
+		}
+	}
+
+	var convMode ConversationMode
+	switch inferred.Profile.Conversation.Mode {
+	case "remote_session":
+		convMode = ConversationModeRemoteSession
+	case "local_history":
+		convMode = ConversationModeLocalHistory
+	}
+
+	sess := c.NewSessionWith(cred, pc, opts...)
+	sess.conversationMode = convMode
+
+	return sess, inferred, nil
 }

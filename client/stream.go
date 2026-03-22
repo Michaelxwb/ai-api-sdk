@@ -1,6 +1,7 @@
 package client
 
 import (
+	"compress/gzip"
 	"context"
 	"fmt"
 	"io"
@@ -54,7 +55,15 @@ func (c *Client) chatWithStream(ctx context.Context, cred *auth.Credential, pc *
 		return nil, err
 	}
 	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
-		data, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
+		var bodyReader io.Reader = io.LimitReader(resp.Body, 1<<20)
+		if resp.Header.Get("Content-Encoding") == "gzip" {
+			gr, gzErr := gzip.NewReader(resp.Body)
+			if gzErr == nil {
+				bodyReader = io.LimitReader(gr, 1<<20)
+				defer func() { _ = gr.Close() }()
+			}
+		}
+		data, _ := io.ReadAll(bodyReader)
 		_ = resp.Body.Close()
 		bodyStr := truncateAPIErrorBody(string(data))
 		if cancel != nil {

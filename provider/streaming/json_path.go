@@ -44,6 +44,9 @@ func ExtractJSONPath(data []byte, path string) (string, error) {
 			if err != nil {
 				return "", fmt.Errorf("json path expects array index at %q", part)
 			}
+			if idx < 0 {
+				idx = len(v) + idx // -1 → last element, -2 → second to last, etc.
+			}
 			if idx < 0 || idx >= len(v) {
 				return "", fmt.Errorf("json path index out of range: %d", idx)
 			}
@@ -57,32 +60,91 @@ func ExtractJSONPath(data []byte, path string) (string, error) {
 }
 
 // MakeJSONPathExtractor builds a delta extractor based on a single JSON path.
-func MakeJSONPathExtractor(deltaPath, donePath, doneValue string) DeltaExtractor {
-	return MakeJSONPathMultiExtractor([]string{deltaPath}, donePath, doneValue)
+func MakeJSONPathExtractor(deltaPath, donePath, doneValue, errorPath string) DeltaExtractor {
+	return MakeJSONPathMultiExtractor([]string{deltaPath}, donePath, doneValue, errorPath)
 }
 
 // MakeJSONPathMultiExtractor builds a delta extractor based on multiple JSON paths.
-func MakeJSONPathMultiExtractor(deltaPaths []string, donePath, doneValue string) DeltaExtractor {
+//
+// Special behaviors:
+//   - Empty delta path ("") → decode data as a JSON string value directly (for SSE streams
+//     where the data line itself is the content, not wrapped in a JSON object).
+//   - Empty donePath + non-empty doneValue → compare against the SSE event type parameter
+//     (for streams that signal termination via an SSE "event:" header, e.g. "event: stop").
+//   - Non-empty donePath → extract from data JSON and compare (standard JSON path done check).
+func MakeJSONPathMultiExtractor(deltaPaths []string, donePath, doneValue, errorPath string) DeltaExtractor {
+	// Auto-detect cumulative vs delta mode. Once cumulative is detected
+	// (frame N's text strictly extends frame N-1's text), the flag stays on
+	// and subsequent frames only emit the new suffix. Repeated identical
+	// frames emit nothing. Transparent for delta-mode APIs where consecutive
+	// texts never form a prefix chain.
+	var lastCumulative string
+	var cumulativeMode bool
+
 	return func(event string, data []byte) (text string, done bool, err error) {
+		// Determine done first.
+		if doneValue != "" {
+			if donePath == "" {
+				// Empty donePath: compare against SSE protocol-level event type.
+				done = (event == doneValue)
+			} else {
+				if val, e := ExtractJSONPath(data, donePath); e == nil {
+					done = (val == doneValue)
+				}
+			}
+		}
+
+		// Always attempt text extraction, even on the final done frame.
+		// NDJSON APIs (e.g. Ollama) embed both content and done=true in the same frame.
+		// SSE terminal frames ("[DONE]") are handled by the parser's DoneMarker and
+		// never reach the extractor, so this change does not affect SSE behavior.
 		if len(deltaPaths) > 0 {
 			var builder strings.Builder
 			for _, path := range deltaPaths {
 				if path == "" {
+					// Empty path: decode data as a raw JSON string (e.g. data: "hello").
+					var s string
+					if e := json.Unmarshal(data, &s); e == nil {
+						builder.WriteString(s)
+					}
 					continue
 				}
-				val, err := ExtractJSONPath(data, path)
-				if err != nil || val == "" {
+				val, e := ExtractJSONPath(data, path)
+				if e != nil || val == "" {
 					continue
 				}
 				builder.WriteString(val)
 			}
 			text = builder.String()
 		}
-		if donePath != "" {
-			if val, err := ExtractJSONPath(data, donePath); err == nil {
-				done = (val == doneValue)
+
+		// Auto-detect cumulative mode: if extracted text strictly extends
+		// the previous accumulated text, switch to cumulative mode permanently.
+		if text != "" {
+			if !cumulativeMode && lastCumulative != "" &&
+				len(text) > len(lastCumulative) && strings.HasPrefix(text, lastCumulative) {
+				cumulativeMode = true
+			}
+			if cumulativeMode && strings.HasPrefix(text, lastCumulative) {
+				// Strip known prefix; empty result when text repeats identically.
+				text = text[len(lastCumulative):]
+				lastCumulative += text
+			} else {
+				lastCumulative += text
 			}
 		}
+
+		// If text is empty, check for server-side error.
+		if text == "" {
+			errCheckPath := errorPath
+			if errCheckPath == "" {
+				errCheckPath = "error.message"
+			}
+			if errMsg, e := ExtractJSONPath(data, errCheckPath); e == nil && errMsg != "" {
+				return "", false, fmt.Errorf("stream: server error: %s", errMsg)
+			}
+		}
+
 		return text, done, nil
 	}
 }

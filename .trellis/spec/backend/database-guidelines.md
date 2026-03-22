@@ -245,6 +245,43 @@ defer rows.Close()
 
 **良好**：创建一个新的可选接口（如 `SessionStoreAppender`）
 
+### 错误 6：以为 remote_session / HistoryNone 会禁止落盘
+
+**症状**：`remote_session` 模式或设置 `HistoryNone` 后，`sessions.json`/数据库没有新增或更新记录。
+
+**原因**：未显式传入 `SessionStore`；`HistoryNone` 只影响历史加载，不影响保存，保存仍依赖 `store != nil`。
+
+**修复**：创建 Session 时显式传入 `SessionStore`；`HistoryNone` 可保留，用于“仅持久化、不加载历史”的单轮场景。
+
+**示例代码**：
+```go
+store, _ := sessionstore.NewFileStore(filepath.Join("examples", "sessions.json"))
+
+sess := cli.NewSessionWith(
+    cred,
+    pc,
+    client.WithStore(store),
+    client.WithHistoryMode(client.HistoryNone),
+    client.WithConversationMode(client.ConversationModeRemoteSession),
+)
+_, _ = sess.Chat(ctx, req)
+```
+
+### 错误 7：FileStore 使用相对路径却假设固定目录
+
+**症状**：`sessions.json` 出现在意外目录，或换目录执行后无法读取旧数据。
+
+**原因**：FileStore 的路径以**当前工作目录**为基准解析；运行目录变化即写入位置变化。
+
+**修复**：从 repo 根目录运行，或改为绝对路径（或用明确的基准目录拼接）。
+
+**示例代码**：
+```go
+root := "/Users/jahan/workspace/ai-api-sdk"
+path := filepath.Join(root, "examples", "sessions.json")
+store, _ := sessionstore.NewFileStore(path)
+```
+
 ---
 
 ## 跨后端差异

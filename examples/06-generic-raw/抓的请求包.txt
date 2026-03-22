@@ -1,0 +1,35 @@
+POST /api/v0/chat/completion HTTP/1.1
+Host: chat.deepseek.com
+Connection: keep-alive
+x-client-locale: zh_CN
+sec-ch-ua-platform: "macOS"
+authorization: Bearer XNjYlJGs9f71f1DemwFVDoHpLP/0PMZUXmAPpficO0w7Ol8w36Dh3Q7iLVD8S0gQ
+sec-ch-ua: "Not:A-Brand";v="99", "Google Chrome";v="145", "Chromium";v="145"
+sec-ch-ua-mobile: ?0
+x-ds-pow-response: eyJhbGdvcml0aG0iOiJEZWVwU2Vla0hhc2hWMSIsImNoYWxsZW5nZSI6ImM4MmU4ZTlhM2MzZmM5YTMzYTk5MjBiNjNhM2E0MDMxNWNlZTdkYzc4YzI2NThkMTk4YTFkYTBlZWU5ZTljNGYiLCJzYWx0IjoiMjhlNzljYjY1NjI2ZDZmOTYxYjEiLCJhbnN3ZXIiOjExNzAwMywic2lnbmF0dXJlIjoiZDJkNmJkNTdiNjFiYmUxYmMyMDA3YTllMjE5YmQ3NzJkMDA0MDMwMjY0ZGM0NzRkM2ExOTVkYjEwMGI3Nzc2MCIsInRhcmdldF9wYXRoIjoiL2FwaS92MC9jaGF0L2NvbXBsZXRpb24ifQ==
+x-client-timezone-offset: 28800
+x-app-version: 20241129.1
+User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/145.0.0.0 Safari/537.36
+x-client-version: 1.7.0
+accept: */*
+content-type: application/json
+x-client-platform: web
+Origin: https://chat.deepseek.com
+Sec-Fetch-Site: same-origin
+Sec-Fetch-Mode: cors
+Sec-Fetch-Dest: empty
+Referer: https://chat.deepseek.com/a/chat/s/a8c36f6b-185a-4ca6-a9fa-3d21f958a8fd
+Accept-Encoding: gzip, deflate, br, zstd
+Accept-Language: zh-CN,zh;q=0.9
+Cookie: HWWAFSESTIME=1772953621359; HWWAFSESID=5a92ae9b47116810781; ds_session_id=dbe23aac055b4893a5c10388f32cbc5e; smidV2=20260308150706c1c06776e58be9557be66b6c776e6b6800631eb51024144c0; .thumbcache_6b2e5483f9d858d7c661c5e276b6a6ae=TrSTaHNGMHtP6UNt7gH+pFEIaMljZ86hmKFN3C21fO3jx4lVz/M/fsZGTew5qoLwO10R0Y8tEuDRx030igZuxw%3D%3D
+Content-Length: 239
+
+{
+  "chat_session_id": "a8c36f6b-185a-4ca6-a9fa-3d21f958a8fd",
+  "parent_message_id": 4,
+  "prompt": "我问到第一个问题是什么？",
+  "ref_file_ids": [],
+  "thinking_enabled": false,
+  "search_enabled": true,
+  "preempt": false
+}

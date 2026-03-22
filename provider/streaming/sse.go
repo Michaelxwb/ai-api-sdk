@@ -95,6 +95,10 @@ func (p *SSEParser) processLine(line string, currentEvent *string, dataLines *[]
 		*dataLines = append(*dataLines, sseFieldValue(trimmed, "data:"))
 		return false
 	}
+	// Explicitly skip retry: lines per SSE spec
+	if strings.HasPrefix(trimmed, "retry:") {
+		return false
+	}
 	return false
 }
 
@@ -129,6 +133,6 @@ func (p *SSEParser) handleEvent(
 		return true
 	}
 
-	sendStreamChunk(out, ctx, StreamChunk{Text: text, Done: done, Raw: []byte(data)})
+	sendStreamChunk(out, ctx, StreamChunk{Text: text, Done: done, Raw: []byte(data), Event: event})
 	return done
 }

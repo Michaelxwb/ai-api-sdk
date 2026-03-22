@@ -1,0 +1,4 @@
+{"file": ".claude/commands/trellis/finish-work.md", "reason": "Finish work checklist"}
+{"file": ".claude/commands/trellis/check-backend.md", "reason": "Backend check spec"}
+{"file": "docs/internal/design-generic-adapter-integration.md", "reason": "验证实现是否符合 V2.5 设计方案的所有 REQ 和 AC"}
+{"file": ".trellis/spec/backend/quality-guidelines.md", "reason": "验证代码质量标准"}

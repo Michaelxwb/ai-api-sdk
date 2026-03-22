@@ -25,7 +25,7 @@ providers:
   # Local vLLM (OpenAI-compatible)
   - name: "vllm_local"
     type: "openai_compat"
-    base_url: "https://api.5090523.xyz/v1"
+    base_url: "http://10.6.193.48:30090/v1"
     auth_ref: "vllm_bearer"
 
   - name: "dashscope"
@@ -76,12 +76,44 @@ providers:
   # Optional Dify
   - name: "dify"
     type: "dify"
-    base_url: "https://api.dify.ai/v1"  # 或自建 Dify 地址
+    base_url: "https://adaidify.sangfor.com/v1"  # 或自建 Dify 地址
     auth_ref: "dify_key"
     # extra_body:  # 可选：注入变量
     #   inputs:
     #     var1: "value1"
     #   user: "custom-user-id"
+
+  # FastGPT (local_history mode: set via WithConversationMode() when creating session)
+  - name: "fastgpt_local"
+    type: "fastgpt"
+    base_url: "https://api.fastgpt.in"
+    path: "/api/v1/chat/completions"
+    auth_ref: "fastgpt_key"
+    extra_body:
+      detail: true
+      variables:
+        team: "demo"
+        channel: "examples"
+
+  # FastGPT (remote_session mode: set via WithConversationMode() when creating session)
+  - name: "fastgpt_remote"
+    type: "fastgpt"
+    base_url: "https://api.fastgpt.in"
+    path: "/api/v1/chat/completions"
+    auth_ref: "fastgpt_key"
+    extra_body:
+      detail: true
+      variables:
+        team: "demo"
+        channel: "examples"
+
+  # RAGFlow (chat_id is required in extra_body, it identifies the Chat Assistant)
+  - name: "ragflow"
+    type: "ragflow"
+    base_url: "http://ragflow.example.com"  # 自建 RAGFlow 地址
+    auth_ref: "ragflow_key"
+    extra_body:
+      chat_id: "your-chat-assistant-id"  # 必填：RAGFlow Chat Assistant ID
 
 # Credentials (referenced by providers[].auth_ref).
 credentials:
@@ -91,7 +123,7 @@ credentials:
   - id: "vllm_bearer"
     provider: "openai_compat"
     auth_type: "bearer_token"
-    access_token: "sk-YOUR-TOKEN-HERE"
+    access_token: "sk-TOKEN"
 
   - id: "dashscope_key"
     provider: "dashscope"
@@ -131,4 +163,14 @@ credentials:
   - id: "dify_key"
     provider: "dify"
     auth_type: "api_key"
-    api_key: "app-lwrLMC2HKTjz1jDLq2T02i4l"
+    api_key: "app-59zRGqk6BMwGkKz3HWLIezvi"
+
+  - id: "fastgpt_key"
+    provider: "fastgpt"
+    auth_type: "api_key"
+    api_key: "fastgpt-TOKEN"
+
+  - id: "ragflow_key"
+    provider: "ragflow"
+    auth_type: "api_key"
+    api_key: "ragflow-TOKEN"

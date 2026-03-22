@@ -34,7 +34,7 @@ func TestSSEParser_ParseDataAndDone(t *testing.T) {
 	}
 
 	parser := &streaming.SSEParser{Config: streaming.StreamConfig{DoneMarker: "[DONE]"}}
-	extractor := streaming.MakeJSONPathExtractor("choices.0.delta.content", "", "")
+	extractor := streaming.MakeJSONPathExtractor("choices.0.delta.content", "", "", "")
 	ch, err := parser.Parse(context.Background(), resp, extractor)
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
@@ -69,7 +69,7 @@ func TestNDJSONParser_Parse(t *testing.T) {
 	}
 
 	parser := &streaming.NDJSONParser{Config: streaming.StreamConfig{}}
-	extractor := streaming.MakeJSONPathExtractor("message.content", "done", "true")
+	extractor := streaming.MakeJSONPathExtractor("message.content", "done", "true", "")
 	ch, err := parser.Parse(context.Background(), resp, extractor)
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)
@@ -138,7 +138,7 @@ func TestSSEParser_EOFHandling(t *testing.T) {
 	}
 
 	parser := &streaming.SSEParser{Config: streaming.StreamConfig{}}
-	extractor := streaming.MakeJSONPathExtractor("choices.0.delta.content", "", "")
+	extractor := streaming.MakeJSONPathExtractor("choices.0.delta.content", "", "", "")
 	ch, err := parser.Parse(context.Background(), resp, extractor)
 	if err != nil {
 		t.Fatalf("Parse error: %v", err)

@@ -11,12 +11,16 @@ type Message = base.Message
 
 // SessionState represents a full session snapshot.
 type SessionState struct {
-	ID        string            `json:"id"`
-	Provider  string            `json:"provider"`
-	Messages  []Message         `json:"messages"`
-	CreatedAt time.Time         `json:"created_at"`
-	UpdatedAt time.Time         `json:"updated_at"`
-	Meta      map[string]string `json:"meta,omitempty"`
+	ID        string    `json:"id"`
+	Provider  string    `json:"provider"`
+	Messages  []Message `json:"messages"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+	// Meta holds session metadata. Standard keys:
+	//   "mode"     - ConversationMode value ("remote_session" or "local_history")
+	//   "on_error" - OnErrorStrategy value ("abort" or "continue")
+	//   "model"    - model name used in this session
+	Meta map[string]string `json:"meta,omitempty"`
 }
 
 // SessionMeta carries basic session metadata.

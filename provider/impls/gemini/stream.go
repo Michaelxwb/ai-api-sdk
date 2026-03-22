@@ -25,6 +25,7 @@ func (s *GeminiSpec) ParseStreamResponse(resp *http.Response) (<-chan streaming.
 		geminiStreamConfig.DeltaPaths[0],
 		geminiStreamConfig.DonePath,
 		geminiStreamConfig.DoneValue,
+		"",
 	)
 	return parser.Parse(streaming.StreamContext(resp), resp, extractor)
 }

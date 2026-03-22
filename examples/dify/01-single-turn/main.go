@@ -4,314 +4,44 @@ import (
 	"context"
 	"fmt"
 	"log"
-	"os"
-	"path/filepath"
 
-	"github.com/Michaelxwb/ai-api-sdk/auth"
 	"github.com/Michaelxwb/ai-api-sdk/client"
-	"github.com/Michaelxwb/ai-api-sdk/config"
-	"github.com/Michaelxwb/ai-api-sdk/examples/sessionstore"
-	"github.com/Michaelxwb/ai-api-sdk/provider/base"
+	"github.com/Michaelxwb/ai-api-sdk/provider/streaming"
 
 	_ "github.com/Michaelxwb/ai-api-sdk/provider"
 )
 
-const (
-	providerName      = "dify"
-	promptText        = "什么是Go语言？"
-	streamOutput bool = true
-)
-
 func main() {
 	cli := client.New()
-	if err := loadLocalConfig(cli); err != nil {
-		log.Fatalf("Failed to load config: %v", err)
-	}
 	ctx := context.Background()
 
-	fmt.Println("=== Dify 单轮对话示例 ===\n")
-	fmt.Println("说明：Dify 的 conversation_id 由服务端生成，SDK 会自动提取并保存。\n")
+	fmt.Println("=== Dify 单轮对话示例（Quick API）===")
+	fmt.Println("说明：Dify 为 remote_session 模式，conversation_id 由服务端生成，SDK 自动提取。")
 
-	// ========================================
-	// 场景1：无SessionStore（最简单）
-	// ========================================
-	fmt.Println("场景1：=========================无SessionStore=========================")
-	example1_NoStore(cli, ctx)
-
-	// ========================================
-	// 场景2：Memory SessionStore（内存审计）
-	// ========================================
-	fmt.Println("\n场景2：=========================Memory SessionStore=========================")
-	example2_MemoryStore(cli, ctx)
-
-	// ========================================
-	// 场景3：File SessionStore
-	// ========================================
-	fmt.Println("\n场景3：=========================File SessionStore=========================")
-	example3_FileStore(cli, ctx)
-
-	// ========================================
-	// 场景4：SQLite SessionStore
-	// ========================================
-	fmt.Println("\n场景4：=========================SQLite SessionStore=========================")
-	example4_SQLiteStore(cli, ctx)
-
-	// ========================================
-	// 场景5：MySQL SessionStore（需要配置）
-	// ========================================
-	// fmt.Println("\n场景5：MySQL SessionStore")
-	// example5_MySQLStore(cli, ctx)
-
-	// ========================================
-	// 场景6：PostgreSQL SessionStore（需要配置）
-	// ========================================
-	// fmt.Println("\n场景6：PostgreSQL SessionStore")
-	// example6_PostgreSQLStore(cli, ctx)
-
-	// ========================================
-	// 场景7：Redis SessionStore（需要配置）
-	// ========================================
-	// fmt.Println("\n场景7：Redis SessionStore")
-	// example7_RedisStore(cli, ctx)
-}
-
-func example1_NoStore(cli *client.Client, ctx context.Context) {
-	sess := cli.NewSession(
-		providerName,
-		client.WithHistoryMode(client.HistoryNone),
-	)
-
-	if streamOutput {
-		fmt.Print("回答: ")
-	}
-	text, err := chat(ctx, sess, base.ChatRequest{
-		Messages: []base.Message{{
-			Role:    "user",
-			Content: promptText,
-		}},
-	})
-	if err != nil {
-		log.Printf("Error: %v", err)
-		return
-	}
-
-	if !streamOutput {
-		fmt.Printf("回答: %s\n", text)
-	}
-	fmt.Printf("conversation_id: %s (自动提取)\n", sess.ID())
-}
-
-func example2_MemoryStore(cli *client.Client, ctx context.Context) {
-	store := sessionstore.NewMemory()
-
-	sess := cli.NewSession(
-		providerName,
-		client.WithStore(store),
-		client.WithHistoryMode(client.HistoryNone), // 单轮：仅持久化，不加载历史
-	)
-
-	if streamOutput {
-		fmt.Print("回答: ")
-	}
-	text, err := chat(ctx, sess, base.ChatRequest{
-		Messages: []base.Message{{
-			Role:    "user",
-			Content: promptText,
-		}},
-	})
-	if err != nil {
-		log.Printf("Error: %v", err)
-		return
-	}
-
-	if !streamOutput {
-		fmt.Printf("回答: %s\n", text)
-	}
-	fmt.Printf("conversation_id: %s (已保存到Memory)\n", sess.ID())
-}
-
-func example3_FileStore(cli *client.Client, ctx context.Context) {
-	store := sessionstore.NewFile(sessionstore.FileConfig{
-		BaseDir: "examples",
+	qs := cli.Quick(client.ProviderConfig{
+		Provider: "dify",
+		APIKey:   "app-59zRGqk6BMwGkKz3HWLIezvi",
+		BaseURL:  "https://adaidify.sangfor.com/v1",
 	})
 
-	sess := cli.NewSession(
-		providerName,
-		client.WithStore(store),
-		client.WithHistoryMode(client.HistoryNone),
-	)
-
-	if streamOutput {
-		fmt.Print("回答: ")
-	}
-	text, err := chat(ctx, sess, base.ChatRequest{
-		Messages: []base.Message{{
-			Role:    "user",
-			Content: promptText,
-		}},
-	})
+	fmt.Print("回答: ")
+	ch, err := qs.SendText(ctx, "用20个字简单回答什么是Go语言？")
 	if err != nil {
-		log.Printf("Error: %v", err)
-		return
+		log.Fatalf("Error: %v", err)
 	}
-
-	if !streamOutput {
-		fmt.Printf("回答: %s\n", text)
+	if err := printStream(ch); err != nil {
+		log.Fatalf("Stream error: %v", err)
 	}
-	fmt.Printf("conversation_id: %s (已保存到 examples/)\n", sess.ID())
+	fmt.Printf("conversation_id: %s\n", qs.Session().ID())
 }
 
-func example4_SQLiteStore(cli *client.Client, ctx context.Context) {
-	store, err := sessionstore.NewSQLite(sessionstore.SQLiteConfig{
-		DSN: "examples/sessions.db",
-	})
-	if err != nil {
-		log.Printf("Error creating SQLite store: %v", err)
-		return
-	}
-	defer func() { _ = store.Close() }()
-
-	sess := cli.NewSession(
-		providerName,
-		client.WithStore(store),
-		client.WithHistoryMode(client.HistoryNone),
-	)
-
-	if streamOutput {
-		fmt.Print("回答: ")
-	}
-	text, err := chat(ctx, sess, base.ChatRequest{
-		Messages: []base.Message{{
-			Role:    "user",
-			Content: promptText,
-		}},
-	})
-	if err != nil {
-		log.Printf("Error: %v", err)
-		return
-	}
-
-	if !streamOutput {
-		fmt.Printf("回答: %s\n", text)
-	}
-	fmt.Printf("conversation_id: %s (已保存到SQLite)\n", sess.ID())
-}
-
-func example5_MySQLStore(_ *client.Client, _ context.Context) {
-	// 需要先配置 MySQL DSN，例如：
-	// "user:password@tcp(localhost:3306)/sessions?parseTime=true"
-	// store, err := sessionstore.NewMySQL(sessionstore.MySQLConfig{DSN: "..."})
-	// if err != nil {
-	// 	log.Printf("Error creating MySQL store: %v", err)
-	// 	return
-	// }
-	// defer store.Close()
-}
-
-func example6_PostgreSQLStore(_ *client.Client, _ context.Context) {
-	// 需要先配置 PostgreSQL DSN，例如：
-	// "postgres://user:password@localhost:5432/sessions?sslmode=disable"
-	// store, err := sessionstore.NewPostgreSQL(sessionstore.PostgreSQLConfig{DSN: "..."})
-	// if err != nil {
-	// 	log.Printf("Error creating PostgreSQL store: %v", err)
-	// 	return
-	// }
-	// defer store.Close()
-}
-
-func example7_RedisStore(_ *client.Client, _ context.Context) {
-	// 需要先配置 Redis 连接，例如：
-	// "redis://localhost:6379/0"
-	// store, err := sessionstore.NewRedis(sessionstore.RedisConfig{Addr: "localhost:6379"})
-	// if err != nil {
-	// 	log.Printf("Error creating Redis store: %v", err)
-	// 	return
-	// }
-	// defer store.Close()
-}
-
-func chat(ctx context.Context, sess *client.Session, req base.ChatRequest) (string, error) {
-	if !streamOutput {
-		resp, err := sess.Chat(ctx, req)
-		if err != nil {
-			return "", err
-		}
-		return resp.Text, nil
-	}
-
-	stream, err := sess.ChatStream(ctx, req)
-	if err != nil {
-		return "", err
-	}
-
-	var fullText string
-	for chunk := range stream {
+func printStream(ch <-chan streaming.StreamChunk) error {
+	for chunk := range ch {
 		if chunk.Error != nil {
-			return "", chunk.Error
+			return chunk.Error
 		}
-		if chunk.Text != "" {
-			fmt.Print(chunk.Text)
-			fullText += chunk.Text
-		}
+		fmt.Print(chunk.Text)
 	}
 	fmt.Println()
-	return fullText, nil
-}
-
-func loadLocalConfig(cli *client.Client) error {
-	cfgPath := findConfigPath()
-	cfg, err := config.LoadConfig(cfgPath)
-	if err != nil {
-		return err
-	}
-	cfg.Auth.Store.Path = resolvePath(cfgPath, cfg.Auth.Store.Path)
-
-	authStore := auth.NewFileStore(cfg.Auth.Store.Path)
-	applyAuthStoreConfig(authStore, cfg)
-
-	mgr, err := auth.NewManager(authStore, &auth.RoundRobinSelector{})
-	if err != nil {
-		return err
-	}
-	for _, cred := range cfg.Credentials {
-		mgr.Register(cred)
-	}
-
-	cli.Config = cfg
-	cli.AuthMgr = mgr
 	return nil
-}
-
-func findConfigPath() string {
-	candidates := []string{
-		"examples/config.example.yaml",
-		"../config.example.yaml",
-		"config.example.yaml",
-	}
-	for _, path := range candidates {
-		if _, err := os.Stat(path); err == nil {
-			return path
-		}
-	}
-	return "examples/config.example.yaml"
-}
-
-func resolvePath(cfgPath, target string) string {
-	if target == "" || filepath.IsAbs(target) {
-		return target
-	}
-	baseDir := filepath.Dir(cfgPath)
-	return filepath.Join(baseDir, target)
-}
-
-func applyAuthStoreConfig(store *auth.FileStore, cfg *config.Config) {
-	store.Encrypted = cfg.Auth.Store.Encryption.Enabled || cfg.Auth.Store.Encrypted
-	store.MasterKeyEnv = cfg.Auth.Store.Encryption.MasterKeyEnv
-	store.MasterKeyFile = cfg.Auth.Store.Encryption.MasterKeyFile
-	if cfg.Auth.Store.Encryption.KDFParams.N > 0 {
-		store.ScryptParams.N = cfg.Auth.Store.Encryption.KDFParams.N
-		store.ScryptParams.R = cfg.Auth.Store.Encryption.KDFParams.R
-		store.ScryptParams.P = cfg.Auth.Store.Encryption.KDFParams.P
-		store.ScryptParams.KeyLen = cfg.Auth.Store.Encryption.KDFParams.KeyLen
-	}
 }
