@@ -2,8 +2,6 @@ module github.com/Michaelxwb/ai-api-sdk
 
 go 1.23.0
 
-toolchain go1.23.12
-
 require (
 	github.com/go-sql-driver/mysql v1.9.3
 	github.com/google/uuid v1.5.0

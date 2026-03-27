@@ -1,6 +1,0 @@
-{"file": ".claude/commands/trellis/finish-work.md", "reason": "Finish work checklist"}
-{"file": ".claude/commands/trellis/check-backend.md", "reason": "Backend check spec"}
-{"file": "/Users/jahan/workspace/ai-api-sdk/.trellis/spec/backend/error-handling.md", "reason": "错误前缀与包装检查"}
-{"file": "/Users/jahan/workspace/ai-api-sdk/.trellis/spec/backend/quality-guidelines.md", "reason": "质量与安全检查"}
-{"file": "/Users/jahan/workspace/ai-api-sdk/.trellis/spec/backend/logging-guidelines.md", "reason": "核心包无日志检查"}
-{"file": "/Users/jahan/workspace/ai-api-sdk/docs/internal/design-fastgpt-chat-integration.md", "reason": "实现与设计一致性"}
