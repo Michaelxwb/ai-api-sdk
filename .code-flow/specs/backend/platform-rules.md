@@ -81,6 +81,25 @@ func WithConversationMode(mode ConversationMode) SessionOption { ... }
 ### Legacy 模式（conversationMode == ""）
 当 `WithConversationMode()` 未设置时走 `chatLegacy()`：**同时**注入 session_id 且加载本地历史——这是老版本行为，不推荐，会导致 session_id 在 local_history provider 中被无意注入。新代码应显式设置 ConversationMode。
 
+### Quick() 校验语义
+`Quick()` 返回 `(*QuickSession, error)`，在创建会话前执行两条校验：
+
+```go
+// 规则 1：provider 无内置 BaseURL 时，调用方必须显式提供
+// 覆盖：fastgpt / ragflow / generic / plugin
+if spec.DefaultBaseURL() == "" && strings.TrimSpace(cfg.BaseURL) == "" {
+    return nil, fmt.Errorf("client: %s requires BaseURL", cfg.Provider)
+}
+
+// 规则 2：provider 支持多种会话模式时，调用方必须显式指定
+// 覆盖：fastgpt / generic / plugin（ResolveConversationMode 返回 ""）
+if ResolveConversationMode(cfg.Provider) == "" && cfg.SessionMode == "" {
+    return nil, fmt.Errorf("client: %s requires explicit SessionMode (\"local_history\" or \"remote_session\")", cfg.Provider)
+}
+```
+
+规则由现有接口推导，无需修改任何 provider 实现；未来新增 provider 只要正确实现 `DefaultBaseURL()` 和在 `ResolveConversationMode` 中注册，自动受保护。
+
 ### 模式推断集中化
 默认会话模式推断集中在 `ResolveConversationMode`，避免在多个入口重复散落判断逻辑。
 

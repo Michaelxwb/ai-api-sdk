@@ -18,11 +18,14 @@ func main() {
 	fmt.Println("=== Dify 单轮对话示例（Quick API）===")
 	fmt.Println("说明：Dify 为 remote_session 模式，conversation_id 由服务端生成，SDK 自动提取。")
 
-	qs := cli.Quick(client.ProviderConfig{
+	qs, err := cli.Quick(client.ProviderConfig{
 		Provider: "dify",
 		APIKey:   "app-59zRGqk6BMwGkKz3HWLIezvi",
 		BaseURL:  "https://adaidify.sangfor.com/v1",
 	})
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 
 	fmt.Print("回答: ")
 	ch, err := qs.SendText(ctx, "用20个字简单回答什么是Go语言？")

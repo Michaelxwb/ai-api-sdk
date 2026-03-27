@@ -16,12 +16,15 @@ func main() {
 
 	fmt.Println("=== 连通性测试示例（Quick API）===")
 
-	qs := cli.Quick(client.ProviderConfig{
+	qs, err := cli.Quick(client.ProviderConfig{
 		Provider: "openai_compat",
 		APIKey:   "sk-TOKEN",
 		BaseURL:  "http://10.6.193.48:30090/v1",
 		Model:    "Qwen3-32B-FP8",
 	})
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 
 	result, err := qs.Test(ctx)
 	if err != nil {

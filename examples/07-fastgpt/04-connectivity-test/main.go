@@ -16,12 +16,13 @@ func main() {
 
 	fmt.Println("=== FastGPT 连通性测试示例（Quick API）===")
 
-	qs := cli.Quick(client.ProviderConfig{
-		Provider: "fastgpt",
-		APIKey:   "fastgpt-TOKEN",
-		BaseURL:  "https://api.fastgpt.in",
-		Path:     "/api/v1/chat/completions",
-		Model:    "fastgpt",
+	qs, err := cli.Quick(client.ProviderConfig{
+		Provider:    "fastgpt",
+		APIKey:      "fastgpt-TOKEN",
+		BaseURL:     "https://api.fastgpt.in",
+		Path:        "/api/v1/chat/completions",
+		Model:       "fastgpt",
+		SessionMode: "local_history",
 		ExtraBody: map[string]any{
 			"detail": false,
 			"variables": map[string]any{
@@ -30,6 +31,9 @@ func main() {
 			},
 		},
 	})
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 
 	result, err := qs.Test(ctx)
 	if err != nil {

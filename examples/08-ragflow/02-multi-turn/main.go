@@ -18,7 +18,7 @@ func main() {
 	fmt.Println("=== RAGFlow 多轮对话示例（Quick API）===")
 	fmt.Println("说明：RAGFlow 为 remote_session 模式，服务端自动维护对话上下文。")
 
-	qs := cli.Quick(client.ProviderConfig{
+	qs, err := cli.Quick(client.ProviderConfig{
 		Provider: "ragflow",
 		APIKey:   "ragflow-TOKEN",
 		BaseURL:  "http://ragflow.example.com",
@@ -26,6 +26,9 @@ func main() {
 			"chat_id": "your-chat-assistant-id",
 		},
 	})
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 
 	fmt.Print("第一次回答: ")
 	ch, err := qs.SendText(ctx, "请记住：我最喜欢的编程语言是 Go。")

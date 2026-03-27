@@ -56,6 +56,12 @@ type SessionStoreAppender interface { Append() }
 var _ session.SessionStore = (*SQLiteStore)(nil)
 ```
 
+### 测试规范
+- 测试统一放在 `test/` 目录，包名 `package test`（外部黑盒，不与被测包在同一目录）。
+- 仅使用标准库 `testing`，禁止引入 testify / gomock 等第三方断言/mock 框架。
+- 集成测试用 `httptest.NewServer` 搭建 stub HTTP 服务，配合 `defer srv.Close()` 清理。
+- Helper 函数首行调用 `t.Helper()` 以保证失败行号指向调用方。
+
 ## Anti-Patterns
 
 - 在 `examples/` 中实现功能后被核心包 import 复用。

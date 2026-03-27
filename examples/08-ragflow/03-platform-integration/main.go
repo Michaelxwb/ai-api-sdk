@@ -19,7 +19,7 @@ func main() {
 	fmt.Println("说明：平台从数据库获取配置，通过 Quick API 直接构建会话。")
 
 	// 模拟从数据库获取的配置
-	qs := cli.Quick(client.ProviderConfig{
+	qs, err := cli.Quick(client.ProviderConfig{
 		Provider: "ragflow",
 		APIKey:   "ragflow-TOKEN",
 		BaseURL:  "http://ragflow.example.com",
@@ -27,6 +27,9 @@ func main() {
 			"chat_id": "your-chat-assistant-id",
 		},
 	})
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 
 	fmt.Print("回答: ")
 	ch, err := qs.SendText(ctx, "用20个字简单回答什么是RAG？")

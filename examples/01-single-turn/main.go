@@ -19,12 +19,15 @@ func main() {
 
 	// 场景1：流式对话（默认）
 	fmt.Println("\n场景1：流式对话")
-	qs := cli.Quick(client.ProviderConfig{
+	qs, err := cli.Quick(client.ProviderConfig{
 		Provider: "openai_compat",
 		APIKey:   "sk-dvqBqqTMuVBYezmYA7sY0YooMbgyS4vzPjlEmC0oXARxTDiA",
 		BaseURL:  "https://api.5090523.xyz/v1",
 		Model:    "gpt-5.2-codex",
 	})
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 
 	fmt.Print("回答: ")
 	ch, err := qs.SendText(ctx, "请用简短的100字告诉我什么是Rust语言？")
@@ -38,13 +41,16 @@ func main() {
 	// 场景2：非流式对话
 	fmt.Println("\n场景2：非流式对话")
 	noStream := false
-	qs2 := cli.Quick(client.ProviderConfig{
+	qs2, err := cli.Quick(client.ProviderConfig{
 		Provider: "openai_compat",
 		APIKey:   "sk-dvqBqqTMuVBYezmYA7sY0YooMbgyS4vzPjlEmC0oXARxTDiA",
 		BaseURL:  "https://api.5090523.xyz/v1",
 		Model:    "gpt-5.2-codex",
 		Stream:   &noStream,
 	})
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 
 	ch2, err := qs2.SendText(ctx, "请用简短的100字告诉我什么是Go语言？")
 	if err != nil {

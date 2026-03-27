@@ -18,12 +18,15 @@ func main() {
 	fmt.Println("=== 多轮对话示例（Quick API）===")
 	fmt.Println("说明：local_history 模式下，SDK 自动维护会话历史，多轮对话开箱即用。")
 
-	qs := cli.Quick(client.ProviderConfig{
+	qs, err := cli.Quick(client.ProviderConfig{
 		Provider: "openai_compat",
 		APIKey:   "sk-TOKEN",
 		BaseURL:  "http://10.6.193.48:30090/v1",
 		Model:    "Qwen3-32B-FP8",
 	})
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 
 	// 第一轮：记住信息
 	fmt.Print("\n第一次回答: ")

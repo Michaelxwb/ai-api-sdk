@@ -18,11 +18,14 @@ func main() {
 	fmt.Println("=== Dify 多轮对话示例（Quick API）===")
 	fmt.Println("说明：Dify 为 remote_session 模式，服务端自动维护对话上下文。")
 
-	qs := cli.Quick(client.ProviderConfig{
+	qs, err := cli.Quick(client.ProviderConfig{
 		Provider: "dify",
 		APIKey:   "app-59zRGqk6BMwGkKz3HWLIezvi",
 		BaseURL:  "https://adaidify.sangfor.com/v1",
 	})
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 
 	fmt.Print("第一次回答: ")
 	ch, err := qs.SendText(ctx, "请记住：我最喜欢的编程语言是 Go。")

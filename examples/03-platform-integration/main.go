@@ -24,12 +24,15 @@ func main() {
 	dbBaseURL := "http://10.6.193.48:30090/v1"
 	dbModel := "Qwen3-32B-FP8"
 
-	qs := cli.Quick(client.ProviderConfig{
+	qs, err := cli.Quick(client.ProviderConfig{
 		Provider: dbProvider,
 		APIKey:   dbAPIKey,
 		BaseURL:  dbBaseURL,
 		Model:    dbModel,
 	})
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 
 	fmt.Print("回答: ")
 	ch, err := qs.SendText(ctx, "请用简短的100字，什么是Go语言？")

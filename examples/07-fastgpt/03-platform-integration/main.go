@@ -19,7 +19,7 @@ func main() {
 	fmt.Println("说明：平台从数据库获取配置，通过 Quick API 直接构建会话。")
 
 	// 模拟从数据库获取的配置
-	qs := cli.Quick(client.ProviderConfig{
+	qs, err := cli.Quick(client.ProviderConfig{
 		Provider:    "fastgpt",
 		APIKey:      "fastgpt-TOKEN",
 		BaseURL:     "https://api.fastgpt.in",
@@ -34,6 +34,9 @@ func main() {
 			},
 		},
 	})
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 
 	fmt.Print("第一次回答: ")
 	ch, err := qs.SendText(ctx, "请记住：我最常用的编辑器是 VS Code。")

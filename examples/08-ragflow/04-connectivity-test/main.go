@@ -16,7 +16,7 @@ func main() {
 
 	fmt.Println("=== RAGFlow 连通性测试示例（Quick API）===")
 
-	qs := cli.Quick(client.ProviderConfig{
+	qs, err := cli.Quick(client.ProviderConfig{
 		Provider: "ragflow",
 		APIKey:   "ragflow-TOKEN",
 		BaseURL:  "http://ragflow.example.com",
@@ -24,6 +24,9 @@ func main() {
 			"chat_id": "your-chat-assistant-id",
 		},
 	})
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 
 	result, err := qs.Test(ctx)
 	if err != nil {

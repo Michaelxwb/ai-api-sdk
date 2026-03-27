@@ -16,11 +16,14 @@ func main() {
 
 	fmt.Println("=== Dify 连通性测试示例（Quick API）===")
 
-	qs := cli.Quick(client.ProviderConfig{
+	qs, err := cli.Quick(client.ProviderConfig{
 		Provider: "dify",
 		APIKey:   "app-59zRGqk6BMwGkKz3HWLIezvi",
 		BaseURL:  "https://adaidify.sangfor.com/v1",
 	})
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 
 	result, err := qs.Test(ctx)
 	if err != nil {

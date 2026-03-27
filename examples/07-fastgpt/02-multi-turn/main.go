@@ -28,7 +28,7 @@ func main() {
 }
 
 func exampleLocalHistory(cli *client.Client, ctx context.Context) {
-	qs := cli.Quick(client.ProviderConfig{
+	qs, err := cli.Quick(client.ProviderConfig{
 		Provider:    "fastgpt",
 		APIKey:      "fastgpt-TOKEN",
 		BaseURL:     "https://api.fastgpt.in",
@@ -43,6 +43,9 @@ func exampleLocalHistory(cli *client.Client, ctx context.Context) {
 			},
 		},
 	})
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 
 	fmt.Print("第一次回答: ")
 	ch, err := qs.SendText(ctx, "请记住：我最喜欢的水果是苹果。")
@@ -67,7 +70,7 @@ func exampleLocalHistory(cli *client.Client, ctx context.Context) {
 }
 
 func exampleRemoteSession(cli *client.Client, ctx context.Context) {
-	qs := cli.Quick(client.ProviderConfig{
+	qs, err := cli.Quick(client.ProviderConfig{
 		Provider:    "fastgpt",
 		APIKey:      "fastgpt-TOKEN",
 		BaseURL:     "https://api.fastgpt.in",
@@ -82,6 +85,9 @@ func exampleRemoteSession(cli *client.Client, ctx context.Context) {
 			},
 		},
 	})
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 
 	fmt.Print("第一次回答: ")
 	ch, err := qs.SendText(ctx, "请记住：我最喜欢的水果是苹果。")

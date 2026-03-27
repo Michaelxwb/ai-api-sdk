@@ -19,7 +19,7 @@ func main() {
 	fmt.Println("说明：RAGFlow 为 remote_session 模式，session_id 由服务端生成，SDK 自动提取。")
 	fmt.Println("注意：chat_id 需通过 ExtraBody 传入。")
 
-	qs := cli.Quick(client.ProviderConfig{
+	qs, err := cli.Quick(client.ProviderConfig{
 		Provider: "ragflow",
 		APIKey:   "ragflow-TOKEN",
 		BaseURL:  "http://ragflow.example.com",
@@ -27,6 +27,9 @@ func main() {
 			"chat_id": "your-chat-assistant-id",
 		},
 	})
+	if err != nil {
+		log.Fatalf("Error: %v", err)
+	}
 
 	fmt.Print("回答: ")
 	ch, err := qs.SendText(ctx, "用20个字简单回答什么是RAG？")

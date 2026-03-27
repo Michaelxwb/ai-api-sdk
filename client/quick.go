@@ -2,6 +2,8 @@ package client
 
 import (
 	"context"
+	"fmt"
+	"strings"
 	"time"
 
 	"github.com/Michaelxwb/ai-api-sdk/auth"
@@ -78,7 +80,20 @@ type QuickSession struct {
 
 // Quick creates a simplified session from a ProviderConfig.
 // It handles credential construction, provider config assembly, and conversation mode inference internally.
-func (c *Client) Quick(cfg ProviderConfig) *QuickSession {
+// Returns an error if required parameters for the provider are missing.
+func (c *Client) Quick(cfg ProviderConfig) (*QuickSession, error) {
+	// 0. Validate provider config using existing ProviderSpec metadata.
+	spec, ok := base.Get(cfg.Provider)
+	if !ok {
+		return nil, fmt.Errorf("client: provider %s not registered", cfg.Provider)
+	}
+	if spec.DefaultBaseURL() == "" && strings.TrimSpace(cfg.BaseURL) == "" {
+		return nil, fmt.Errorf("client: %s requires BaseURL", cfg.Provider)
+	}
+	if ResolveConversationMode(cfg.Provider) == "" && cfg.SessionMode == "" {
+		return nil, fmt.Errorf("client: %s requires explicit SessionMode (\"local_history\" or \"remote_session\")", cfg.Provider)
+	}
+
 	// 1. Build Credential
 	cred := auth.NewCredential(cfg.Provider, cfg.APIKey)
 	if len(cfg.AuthHeaders) > 0 {
@@ -167,7 +182,7 @@ func (c *Client) Quick(cfg ProviderConfig) *QuickSession {
 		pc:      pc,
 		model:   cfg.Model,
 		stream:  useStream,
-	}
+	}, nil
 }
 
 // Send sends a chat request. It automatically chooses streaming or non-streaming based on the Stream setting.
