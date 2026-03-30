@@ -73,6 +73,11 @@ providers:
     type: "deepseek"
     auth_ref: "deepseek_key"
 
+  # 百度千帆（文心一言 ERNIE）
+  - name: "qianfan"
+    type: "qianfan"
+    auth_ref: "qianfan_key"
+
   # Optional Dify
   - name: "dify"
     type: "dify"
@@ -159,6 +164,11 @@ credentials:
     provider: "volcengine"
     auth_type: "bearer_token"
     access_token: "your-ark-api-key"
+
+  - id: "qianfan_key"
+    provider: "qianfan"
+    auth_type: "bearer_token"
+    access_token: "your-qianfan-api-key"
 
   - id: "dify_key"
     provider: "dify"

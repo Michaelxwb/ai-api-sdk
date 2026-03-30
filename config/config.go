@@ -52,10 +52,6 @@ type ProviderConfig struct {
 	AuthRef   string            `yaml:"auth_ref"`
 	Headers   map[string]string `yaml:"headers,omitempty"`
 	ExtraBody map[string]any    `yaml:"extra_body,omitempty"` // extra fields merged into request body
-
-	// GenericProfile holds Generic Adapter configuration for non-standard API providers.
-	// Used when Type is "generic" to define request/response mapping templates.
-	GenericProfile map[string]any `yaml:"generic_profile,omitempty"`
 }
 
 // FindProvider returns provider config by name.

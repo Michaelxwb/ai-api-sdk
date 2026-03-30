@@ -20,10 +20,9 @@ func main() {
 	// 场景1：流式对话（默认）
 	fmt.Println("\n场景1：流式对话")
 	qs, err := cli.Quick(client.ProviderConfig{
-		Provider: "openai_compat",
-		APIKey:   "sk-dvqBqqTMuVBYezmYA7sY0YooMbgyS4vzPjlEmC0oXARxTDiA",
-		BaseURL:  "https://api.5090523.xyz/v1",
-		Model:    "gpt-5.2-codex",
+		Provider: "qianfan",
+		APIKey:   "sk-TOKEN",
+		Model:    "deepseek-r1-250528",
 	})
 	if err != nil {
 		log.Fatalf("Error: %v", err)
@@ -42,10 +41,9 @@ func main() {
 	fmt.Println("\n场景2：非流式对话")
 	noStream := false
 	qs2, err := cli.Quick(client.ProviderConfig{
-		Provider: "openai_compat",
-		APIKey:   "sk-dvqBqqTMuVBYezmYA7sY0YooMbgyS4vzPjlEmC0oXARxTDiA",
-		BaseURL:  "https://api.5090523.xyz/v1",
-		Model:    "gpt-5.2-codex",
+		Provider: "qianfan",
+		APIKey:   "sk-TOKEN",
+		Model:    "deepseek-r1-250528",
 		Stream:   &noStream,
 	})
 	if err != nil {

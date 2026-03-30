@@ -9,6 +9,7 @@ import (
 	"github.com/Michaelxwb/ai-api-sdk/auth"
 	"github.com/Michaelxwb/ai-api-sdk/config"
 	"github.com/Michaelxwb/ai-api-sdk/provider/base"
+	"github.com/Michaelxwb/ai-api-sdk/provider/impls/generic"
 	"github.com/Michaelxwb/ai-api-sdk/provider/streaming"
 	"github.com/Michaelxwb/ai-api-sdk/session"
 )
@@ -63,10 +64,18 @@ type ProviderConfig struct {
 	// StartNewChat forces each call to be independent (no history, no session_id).
 	StartNewChat bool
 
-	// --- Generic provider only (optional) ---
+	// --- Generic provider: raw HTTP spec fields (optional) ---
+	// When Provider == "generic" and Request != "", Quick() internally compiles
+	// these into a GenericProfile via ParseHTTPSpec + ParseRawIntegration.
 
-	// GenericProfile holds generic adapter template configuration.
-	GenericProfile map[string]any
+	// Request is the raw HTTP request template text.
+	// "$$$" = user input, "$$$SESSION_ID$$$" = session ID, "$$$NAME$$$" = chain fields.
+	Request string
+	// Response is a representative HTTP response text for auto-detecting
+	// streaming protocol, delta paths, and done conditions.
+	Response string
+	// ChainFields describes multi-round field chain propagation rules.
+	ChainFields []generic.ChainField
 }
 
 // QuickSession is a simplified session created via Quick().
@@ -104,22 +113,62 @@ func (c *Client) Quick(cfg ProviderConfig) (*QuickSession, error) {
 	}
 
 	// 2. Build internal ProviderConfig
-	pc := &config.ProviderConfig{
-		Name:           cfg.Provider,
-		Type:           cfg.Provider,
-		BaseURL:        cfg.BaseURL,
-		Path:           cfg.Path,
-		Headers:        cfg.Headers,
-		ExtraBody:      cfg.ExtraBody,
-		GenericProfile: cfg.GenericProfile,
+	var pc *config.ProviderConfig
+	var compiledConvMode string // set by generic HTTPSpec compilation path
+
+	if cfg.Provider == "generic" && strings.TrimSpace(cfg.Request) != "" {
+		// Compile raw HTTP spec into GenericProfile + credentials.
+		httpSpec := generic.RawHTTPSpec{
+			Model:       cfg.SessionMode,
+			BaseURL:     cfg.BaseURL,
+			Request:     cfg.Request,
+			Response:    cfg.Response,
+			ChainFields: cfg.ChainFields,
+		}
+		rawSpec, err := generic.ParseHTTPSpec(httpSpec)
+		if err != nil {
+			return nil, fmt.Errorf("client: %w", err)
+		}
+		compiled, err := generic.ParseRawIntegration(rawSpec)
+		if err != nil {
+			return nil, fmt.Errorf("client: %w", err)
+		}
+
+		spec := generic.NewGenericSpec(compiled.Profile)
+		base.Register("generic_quick", spec)
+
+		pc = &config.ProviderConfig{
+			Name:    "generic_quick",
+			Type:    "generic_quick",
+			BaseURL: compiled.BaseURL,
+			Headers: compiled.ExtraHeaders,
+		}
+
+		// Merge credential: explicit APIKey takes priority over extracted header auth.
+		if cfg.APIKey == "" && compiled.Credential != nil {
+			cred = compiled.Credential
+		}
+
+		compiledConvMode = compiled.Profile.Conversation.Mode
+	} else {
+		pc = &config.ProviderConfig{
+			Name:      cfg.Provider,
+			Type:      cfg.Provider,
+			BaseURL:   cfg.BaseURL,
+			Path:      cfg.Path,
+			Headers:   cfg.Headers,
+			ExtraBody: cfg.ExtraBody,
+		}
 	}
 
 	// 3. Build SessionOptions
 	var opts []SessionOption
 
-	// Conversation mode
+	// Conversation mode (compiled generic path may override)
 	sessionMode := cfg.SessionMode
-	if sessionMode == "" {
+	if compiledConvMode != "" {
+		sessionMode = compiledConvMode
+	} else if sessionMode == "" {
 		sessionMode = string(ResolveConversationMode(cfg.Provider))
 	}
 	switch sessionMode {

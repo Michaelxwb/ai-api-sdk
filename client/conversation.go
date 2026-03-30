@@ -20,7 +20,7 @@ const (
 func ResolveConversationMode(provider string) ConversationMode {
 	switch provider {
 	case "openai", "claude", "gemini", "ollama",
-		"deepseek", "moonshot", "dashscope", "volcengine", "openai_compat":
+		"deepseek", "moonshot", "dashscope", "volcengine", "qianfan", "openai_compat":
 		return ConversationModeLocalHistory
 	case "dify", "ragflow":
 		return ConversationModeRemoteSession

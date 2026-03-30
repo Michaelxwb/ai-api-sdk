@@ -4,7 +4,6 @@ import (
 	"testing"
 
 	"github.com/Michaelxwb/ai-api-sdk/client"
-	"github.com/Michaelxwb/ai-api-sdk/config"
 	"github.com/Michaelxwb/ai-api-sdk/provider/base"
 	"github.com/Michaelxwb/ai-api-sdk/session"
 )
@@ -156,21 +155,5 @@ func TestSessionState_MetaKeys(t *testing.T) {
 	}
 	if state.Meta["on_error"] != "abort" {
 		t.Error("expected on_error=abort")
-	}
-}
-
-// Test ProviderConfig GenericProfile field
-func TestProviderConfig_GenericProfile(t *testing.T) {
-	pc := config.ProviderConfig{
-		Name: "test",
-		Type: "generic",
-		GenericProfile: map[string]any{
-			"request": map[string]any{
-				"method": "POST",
-			},
-		},
-	}
-	if pc.GenericProfile == nil {
-		t.Error("expected GenericProfile to be set")
 	}
 }

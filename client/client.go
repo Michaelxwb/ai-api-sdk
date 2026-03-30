@@ -183,6 +183,32 @@ func (c *Client) NewSessionFromHTTPMultiRound(spec generic.RawHTTPMultiRoundSpec
 	return c.NewSessionFromMultiRound(multi, opts...)
 }
 
+// RawReasoning performs multi-round inference on raw HTTP packets and exports the result
+// as a RawHTTPSpec suitable for passing directly to Quick().
+//
+// Usage:
+//
+//	spec, err := cli.RawReasoning(rawMultiRoundSpec)
+//	qs, err := cli.Quick(client.ProviderConfig{
+//	    Provider:    "generic",
+//	    BaseURL:     spec.BaseURL,
+//	    SessionMode: spec.Model,
+//	    Request:     spec.Request,
+//	    Response:    spec.Response,
+//	    ChainFields: spec.ChainFields,
+//	})
+func (c *Client) RawReasoning(spec generic.RawHTTPMultiRoundSpec) (*generic.RawHTTPSpec, error) {
+	_, inferred, err := c.NewSessionFromHTTPMultiRound(spec)
+	if err != nil {
+		return nil, fmt.Errorf("client: raw reasoning inference failed: %w", err)
+	}
+	exported, err := generic.ExportToHTTPSpec(inferred, spec)
+	if err != nil {
+		return nil, fmt.Errorf("client: raw reasoning export failed: %w", err)
+	}
+	return exported, nil
+}
+
 // NewSessionFromMultiRoundWithConfig creates a session with custom inference thresholds.
 func (c *Client) NewSessionFromMultiRoundWithConfig(spec generic.MultiRoundSpec, cfg generic.InferenceConfig, opts ...SessionOption) (*Session, *generic.InferredIntegration, error) {
 	inferred, err := generic.InferIntegrationByMultiRoundWithConfig(spec, cfg)

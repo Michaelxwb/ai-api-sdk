@@ -219,6 +219,7 @@ var inputSemanticKeywords = []string{
 var technicalDynamicKeywords = []string{
 	"req_id", "request_id", "parent_req_id", "client_tm", "client_time",
 	"timestamp", "nonce", "sign", "signature", "trace_id", "scene_param",
+	"device_id", "client_id", "random", "hash", "seq", "sequence", "app_version",
 }
 
 // analyzeFields performs cross-round diff analysis and classifies each request field.
@@ -345,6 +346,10 @@ func classifyStableField(
 			respPath:   sessionRespPath,
 		})
 	}
+	// Note: chain pattern check is intentionally omitted for stable fields.
+	// Stable fields have identical values across all rounds, so checkChainPattern
+	// would trivially match (req[i] == resp[i-1] when both are the same constant).
+	// Real chain fields have changing values and are handled in classifyChangingField.
 	return candidates
 }
 
@@ -434,7 +439,10 @@ func checkSessionIDPattern(
 	bestScore := 0.0
 	bestPath := ""
 	bestReason := ""
-	for rp, rpVals := range respIndex {
+	// Sort response paths for deterministic iteration order.
+	sortedRespPaths := sortedMapKeys(respIndex)
+	for _, rp := range sortedRespPaths {
+		rpVals := respIndex[rp]
 		matchCount := 0
 		totalCheck := 0
 		sameRoundMatches := 0
@@ -514,7 +522,9 @@ func checkChainPattern(
 ) (score float64, respPath string) {
 	bestScore := 0.0
 	bestPath := ""
-	for rp, rpVals := range respIndex {
+	// Sort response paths for deterministic iteration order.
+	for _, rp := range sortedMapKeys(respIndex) {
+		rpVals := respIndex[rp]
 		matchCount := 0
 		totalCheck := 0
 		for i := 1; i < len(rounds); i++ {
@@ -664,7 +674,9 @@ func hasHumanInputTrace(values []string) bool {
 				hasSpaceOrPunct = true
 			}
 		}
-		if hasHan || hasSpaceOrPunct || (hasLetter && len(v) >= 6) {
+		// Chinese text, punctuation/spaces, or English words ≥3 chars all indicate human input.
+		// Threshold lowered from 6 to 3 to catch short English inputs like "hi", "how", "yes".
+		if hasHan || hasSpaceOrPunct || (hasLetter && len(v) >= 3) {
 			return true
 		}
 	}
@@ -1102,6 +1114,16 @@ func buildReport(fields []InferredField, warnings []string, cfg InferenceConfig)
 
 // sortedKeys returns sorted keys from a map.
 func sortedKeys(m map[string]struct{}) []string {
+	keys := make([]string, 0, len(m))
+	for k := range m {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	return keys
+}
+
+// sortedMapKeys returns sorted keys from any map[string]V.
+func sortedMapKeys[V any](m map[string]V) []string {
 	keys := make([]string, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
