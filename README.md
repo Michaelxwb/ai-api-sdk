@@ -73,26 +73,31 @@ for chunk := range ch { fmt.Print(chunk.Text) }
 
 ## 支持的平台
 
-| Provider | 说明 | SessionMode |
-|----------|------|-------------|
-| `openai` | OpenAI GPT 系列 | `local_history` |
-| `claude` | Anthropic Claude | `local_history` |
-| `gemini` | Google Gemini | `local_history` |
-| `ollama` | 本地 Ollama | `local_history` |
-| `deepseek` | DeepSeek | `local_history` |
-| `moonshot` | Moonshot AI | `local_history` |
-| `dashscope` | 阿里云百炼 | `local_history` |
-| `volcengine` | 火山引擎 | `local_history` |
-| `qianfan` | 百度千帆（文心一言） | `local_history` |
-| `openai_compat` | OpenAI 兼容协议（第三方服务） | `local_history` |
-| `dify` | Dify 平台 | `remote_session` |
-| `ragflow` | RAGFlow | `remote_session` |
-| `fastgpt` | FastGPT | 需显式指定 |
-| `generic` | 通用适配器 | 需显式指定 |
+| Provider | 说明 | 必填参数 | 可选参数 | 默认 BaseURL | SessionMode |
+|----------|------|---------|---------|-------------|-------------|
+| `openai` | OpenAI GPT 系列 | `APIKey`, `Model`, `BaseURL` | — | `api.openai.com/v1` | 自动 `local_history` |
+| `claude` | Anthropic Claude | `APIKey`, `Model`, `BaseURL` | — | `api.anthropic.com` | 自动 `local_history` |
+| `gemini` | Google Gemini | `APIKey`, `Model`, `BaseURL` | — | `generativelanguage.googleapis.com` | 自动 `local_history` |
+| `ollama` | 本地/远程 Ollama | `Model`, `BaseURL` | `APIKey` | `127.0.0.1:11434` | 自动 `local_history` |
+| `deepseek` | DeepSeek | `APIKey`, `Model`, `BaseURL` | — | `api.deepseek.com/v1` | 自动 `local_history` |
+| `moonshot` | Moonshot AI | `APIKey`, `Model`, `BaseURL` | — | `api.moonshot.cn/v1` | 自动 `local_history` |
+| `dashscope` | 阿里云百炼 | `APIKey`, `Model`, `BaseURL` | — | `dashscope.aliyuncs.com/compatible-mode/v1` | 自动 `local_history` |
+| `volcengine` | 火山引擎 | `APIKey`, `Model`, `BaseURL` | — | `ark.cn-beijing.volces.com/api/v3` | 自动 `local_history` |
+| `qianfan` | 百度千帆（文心一言） | `APIKey`, `Model`, `BaseURL` | — | `qianfan.baidubce.com/v2` | 自动 `local_history` |
+| `openai_compat` | OpenAI 兼容协议（第三方） | `APIKey`, `Model`, `BaseURL` | — | 无 | 自动 `local_history` |
+| `dify` | Dify 平台 | `APIKey`, `BaseURL` | `Model`, `ExtraBody` | `api.dify.ai/v1` | 自动 `remote_session` |
+| `ragflow` | RAGFlow | `APIKey`, `BaseURL`, `ExtraBody`(必含 `chat_id`) | — | 无 | 自动 `remote_session` |
+| `fastgpt` | FastGPT | `APIKey`, `BaseURL`, `SessionMode` | `ExtraBody` | 无 | 需显式指定 |
+| `generic` | 通用适配器 | `BaseURL`, `SessionMode`, `Request`, `Response` | `ChainFields`, `APIKey` | 无 | 需显式指定 |
 
-**SessionMode 说明**：
-- `local_history`：SDK 管理历史，适合标准 Chat API
-- `remote_session`：服务端管理会话，SDK 传递 session_id
+**说明**：
+- `BaseURL` 有默认值的 Provider 不传则直连官方 API，传入则切换到自建/代理地址
+- `SessionMode`：`local_history` = SDK 管理历史；`remote_session` = 服务端管理会话。标注"自动"的无需手动指定
+- `dify`/`ragflow`/`fastgpt` 的 `Model` 在平台侧配置，SDK 端可不传
+- `generic` 的 `Model` 语义由 `Request` 模板决定，不单独传
+- `ragflow` 需通过 `ExtraBody` 传入 `chat_id`；`fastgpt` 可通过 `ExtraBody` 传入 `detail`、`variables`
+
+**通用可选参数**（所有 Provider 均支持）：`Stream`、`TimeoutSec`、`OnError`、`HistoryMaxMessages`、`HistoryMaxTokens`、`StartNewChat`、`AuthHeaders`、`QueryParams`
 
 ## 配置选项
 
