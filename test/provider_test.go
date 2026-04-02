@@ -13,6 +13,7 @@ import (
 	"github.com/Michaelxwb/ai-api-sdk/auth"
 	_ "github.com/Michaelxwb/ai-api-sdk/provider"
 	"github.com/Michaelxwb/ai-api-sdk/provider/base"
+	"github.com/Michaelxwb/ai-api-sdk/provider/streaming"
 )
 
 type stubSpec struct {
@@ -359,6 +360,86 @@ func TestBailianAppSpec_ParseResponse(t *testing.T) {
 	})
 	t.Run("nil", func(t *testing.T) {
 		if _, err := spec.ParseResponse(nil); err == nil {
+			t.Fatalf("expected error for nil response")
+		}
+	})
+}
+
+func TestBailianAppSpec_ParseStreamResponse(t *testing.T) {
+	spec := mustGetSpec(t, "bailian_app")
+	streamSpec, ok := spec.(streaming.ProviderStreamSpec)
+	if !ok {
+		t.Fatalf("bailian_app does not implement ProviderStreamSpec")
+	}
+
+	t.Run("delta_events_with_usage", func(t *testing.T) {
+		payload := "" +
+			"event: response.output_text.delta\n" +
+			"data: {\"type\":\"response.output_text.delta\",\"delta\":\"hello \"}\n\n" +
+			"event: response.output_text.delta\n" +
+			"data: {\"type\":\"response.output_text.delta\",\"delta\":\"world\"}\n\n" +
+			"event: response.completed\n" +
+			"data: {\"type\":\"response.completed\",\"usage\":{\"input_tokens\":5,\"output_tokens\":10,\"total_tokens\":15}}\n\n"
+
+		resp := newStreamResponse(payload)
+		ch, err := streamSpec.ParseStreamResponse(resp)
+		if err != nil {
+			t.Fatalf("ParseStreamResponse error: %v", err)
+		}
+
+		chunks := collectChunks(ch)
+		if len(chunks) != 3 {
+			t.Fatalf("unexpected chunk count: %d, chunks: %+v", len(chunks), chunks)
+		}
+		if chunks[0].Text != "hello " || chunks[0].Error != nil {
+			t.Fatalf("unexpected first chunk: %+v", chunks[0])
+		}
+		if chunks[1].Text != "world" || chunks[1].Error != nil {
+			t.Fatalf("unexpected second chunk: %+v", chunks[1])
+		}
+		if !chunks[2].Done {
+			t.Fatalf("expected done on last chunk")
+		}
+		if chunks[2].Usage == nil {
+			t.Fatalf("expected usage on completed chunk")
+		}
+		if chunks[2].Usage.PromptTokens != 5 || chunks[2].Usage.CompletionTokens != 10 || chunks[2].Usage.TotalTokens != 15 {
+			t.Fatalf("unexpected usage: %+v", chunks[2].Usage)
+		}
+	})
+
+	t.Run("filters_irrelevant_events", func(t *testing.T) {
+		payload := "" +
+			"event: response.created\n" +
+			"data: {\"type\":\"response.created\"}\n\n" +
+			"event: response.output_text.delta\n" +
+			"data: {\"type\":\"response.output_text.delta\",\"delta\":\"ok\"}\n\n" +
+			"event: response.output_item.done\n" +
+			"data: {\"type\":\"response.output_item.done\"}\n\n" +
+			"event: response.completed\n" +
+			"data: {\"type\":\"response.completed\"}\n\n"
+
+		resp := newStreamResponse(payload)
+		ch, err := streamSpec.ParseStreamResponse(resp)
+		if err != nil {
+			t.Fatalf("ParseStreamResponse error: %v", err)
+		}
+
+		chunks := collectChunks(ch)
+		if len(chunks) != 2 {
+			t.Fatalf("expected 2 chunks (1 delta + 1 done), got %d: %+v", len(chunks), chunks)
+		}
+		if chunks[0].Text != "ok" {
+			t.Fatalf("unexpected text: %q", chunks[0].Text)
+		}
+		if !chunks[1].Done {
+			t.Fatalf("expected done")
+		}
+	})
+
+	t.Run("nil_response", func(t *testing.T) {
+		_, err := streamSpec.ParseStreamResponse(nil)
+		if err == nil {
 			t.Fatalf("expected error for nil response")
 		}
 	})

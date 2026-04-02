@@ -30,12 +30,8 @@ func ResolveConversationMode(provider string) ConversationMode {
 }
 
 // ResolveDefaultStream returns the default streaming mode for a provider.
-// Most providers stream by default; some providers are synchronous-first.
+// Currently all registered providers support streaming, so this always returns true.
 func ResolveDefaultStream(provider string) bool {
-	switch provider {
-	case "bailian_app":
-		return false
-	}
 	return true
 }
 
