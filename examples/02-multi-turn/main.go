@@ -6,6 +6,7 @@ import (
 	"log"
 
 	"github.com/Michaelxwb/ai-api-sdk/client"
+	"github.com/Michaelxwb/ai-api-sdk/examples/sessionstore"
 	"github.com/Michaelxwb/ai-api-sdk/provider/streaming"
 
 	_ "github.com/Michaelxwb/ai-api-sdk/provider"
@@ -18,11 +19,15 @@ func main() {
 	fmt.Println("=== 多轮对话示例（Quick API）===")
 	fmt.Println("说明：local_history 模式下，SDK 自动维护会话历史，多轮对话开箱即用。")
 
+	store := sessionstore.NewFile(sessionstore.FileConfig{
+		Path: "examples/sessions.json",
+	})
+
 	qs, err := cli.Quick(client.ProviderConfig{
-		Provider: "openai_compat",
+		Provider: "bailian_app",
 		APIKey:   "sk-TOKEN",
-		BaseURL:  "http://10.6.193.48:30090/v1",
-		Model:    "Qwen3-32B-FP8",
+		BaseURL:  "https://dashscope.aliyuncs.com/api/v2/apps/agent/a3edddb38bc747dfbe62b2de746972ab/compatible-mode/v1",
+		Store:    store,
 	})
 	if err != nil {
 		log.Fatalf("Error: %v", err)

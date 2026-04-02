@@ -854,6 +854,150 @@ func TestSession_ChatStream(t *testing.T) {
 	})
 }
 
+func TestBailianApp_QuickStoreAndTest(t *testing.T) {
+	t.Run("quick_sendtext_persists_local_history", func(t *testing.T) {
+		var call int32
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if got := r.Header.Get("Authorization"); got != "Bearer sk-test" {
+				t.Fatalf("Authorization = %q, want %q", got, "Bearer sk-test")
+			}
+			if r.URL.Path != "/api/v2/apps/agent/app-id/compatible-mode/v1/responses" {
+				t.Fatalf("path = %q, want %q", r.URL.Path, "/api/v2/apps/agent/app-id/compatible-mode/v1/responses")
+			}
+
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode request body: %v", err)
+			}
+			current := atomic.AddInt32(&call, 1)
+
+			input, ok := payload["input"].([]any)
+			if !ok {
+				t.Fatalf("input should be an array, got %T", payload["input"])
+			}
+			if current == 1 && len(input) != 1 {
+				t.Fatalf("round1 input size = %d, want 1", len(input))
+			}
+			if current == 2 && len(input) != 3 {
+				t.Fatalf("round2 input size = %d, want 3 (history + new user)", len(input))
+			}
+
+			_, _ = io.WriteString(w, `{"output_text":"ok"}`)
+		}))
+		defer srv.Close()
+
+		store := &mockStore{}
+		cli := client.New()
+		qs, err := cli.Quick(client.ProviderConfig{
+			Provider: "bailian_app",
+			APIKey:   "sk-test",
+			BaseURL:  srv.URL + "/api/v2/apps/agent/app-id/compatible-mode/v1",
+			Store:    store,
+		})
+		if err != nil {
+			t.Fatalf("Quick error: %v", err)
+		}
+
+		ch1, err := qs.SendText(context.Background(), "你好")
+		if err != nil {
+			t.Fatalf("SendText round1 error: %v", err)
+		}
+		for chunk := range ch1 {
+			if chunk.Error != nil {
+				t.Fatalf("round1 chunk error: %v", chunk.Error)
+			}
+		}
+
+		ch2, err := qs.SendText(context.Background(), "再聊一句")
+		if err != nil {
+			t.Fatalf("SendText round2 error: %v", err)
+		}
+		for chunk := range ch2 {
+			if chunk.Error != nil {
+				t.Fatalf("round2 chunk error: %v", chunk.Error)
+			}
+		}
+
+		_, saveCount := store.Counts()
+		if saveCount != 2 {
+			t.Fatalf("saveCount = %d, want 2", saveCount)
+		}
+	})
+
+	t.Run("quick_test_works_without_model", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/api/v2/apps/agent/app-id/compatible-mode/v1/responses" {
+				t.Fatalf("path = %q, want %q", r.URL.Path, "/api/v2/apps/agent/app-id/compatible-mode/v1/responses")
+			}
+			var payload map[string]any
+			if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+				t.Fatalf("decode request body: %v", err)
+			}
+			if _, ok := payload["model"]; ok {
+				t.Fatalf("expected no model in test payload, got %v", payload["model"])
+			}
+			_, _ = io.WriteString(w, `{"output_text":"pong","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`)
+		}))
+		defer srv.Close()
+
+		cli := client.New()
+		qs, err := cli.Quick(client.ProviderConfig{
+			Provider: "bailian_app",
+			APIKey:   "sk-test",
+			BaseURL:  srv.URL + "/api/v2/apps/agent/app-id/compatible-mode/v1",
+		})
+		if err != nil {
+			t.Fatalf("Quick error: %v", err)
+		}
+
+		result, err := qs.Test(context.Background())
+		if err != nil {
+			t.Fatalf("Quick.Test error: %v", err)
+		}
+		if result.Response.Text != "pong" {
+			t.Fatalf("response text = %q, want %q", result.Response.Text, "pong")
+		}
+		if result.Response.Usage == nil || result.Response.Usage.TotalTokens != 2 {
+			t.Fatalf("unexpected usage: %+v", result.Response.Usage)
+		}
+	})
+}
+
+func TestBailianApp_TestWith(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v2/apps/agent/app-id/compatible-mode/v1/responses" {
+			t.Fatalf("path = %q, want %q", r.URL.Path, "/api/v2/apps/agent/app-id/compatible-mode/v1/responses")
+		}
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		if _, ok := payload["model"]; ok {
+			t.Fatalf("expected no model for placeholder test model, got %v", payload["model"])
+		}
+		_, _ = io.WriteString(w, `{"output_text":"ok"}`)
+	}))
+	defer srv.Close()
+
+	cli := client.New()
+	cred := auth.NewCredential("bailian_app", "sk-test")
+	pc := &config.ProviderConfig{
+		Name:    "bailian_app",
+		Type:    "bailian_app",
+		BaseURL: srv.URL + "/api/v2/apps/agent/app-id/compatible-mode/v1",
+	}
+
+	result, err := cli.TestWith(context.Background(), cred, pc, &client.TestOptions{
+		Model: "test",
+	})
+	if err != nil {
+		t.Fatalf("TestWith error: %v", err)
+	}
+	if result.Response.Text != "ok" {
+		t.Fatalf("response text = %q, want %q", result.Response.Text, "ok")
+	}
+}
+
 func parseSimpleJSONResponse(resp *http.Response) (base.ChatResponse, error) {
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {

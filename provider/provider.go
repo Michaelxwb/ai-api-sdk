@@ -1,6 +1,7 @@
 package provider
 
 import (
+	_ "github.com/Michaelxwb/ai-api-sdk/provider/impls/bailian"
 	_ "github.com/Michaelxwb/ai-api-sdk/provider/impls/claude"
 	_ "github.com/Michaelxwb/ai-api-sdk/provider/impls/dify"
 	_ "github.com/Michaelxwb/ai-api-sdk/provider/impls/fastgpt"

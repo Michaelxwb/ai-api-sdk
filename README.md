@@ -1,11 +1,11 @@
 # AI API SDK
 
-> 统一 AI 模型接入 SDK，一行代码接入 14+ 主流 AI 平台
+> 统一 AI 模型接入 SDK，一行代码接入 15+ 主流 AI 平台
 
 ## 特性
 
 - 🚀 **极简接入** - Quick API 一行代码完成配置
-- 🌐 **14+ 平台** - OpenAI、Claude、Gemini、Dify、FastGPT、RAGFlow 等
+- 🌐 **15+ 平台** - OpenAI、Claude、Gemini、Dify、FastGPT、RAGFlow 等
 - 💬 **流式优先** - 原生流式支持，实时响应
 - 🔄 **会话管理** - 自动管理多轮对话历史
 - 🔐 **灵活认证** - API Key、Bearer Token、自定义 Header
@@ -73,27 +73,40 @@ for chunk := range ch { fmt.Print(chunk.Text) }
 
 ## 支持的平台
 
+### 基模接入
+
 | Provider | 说明 | 必填参数 | 可选参数 | 默认 BaseURL | SessionMode |
 |----------|------|---------|---------|-------------|-------------|
-| `openai` | OpenAI GPT 系列 | `APIKey`, `Model`, `BaseURL` | — | `api.openai.com/v1` | 自动 `local_history` |
-| `claude` | Anthropic Claude | `APIKey`, `Model`, `BaseURL` | — | `api.anthropic.com` | 自动 `local_history` |
-| `gemini` | Google Gemini | `APIKey`, `Model`, `BaseURL` | — | `generativelanguage.googleapis.com` | 自动 `local_history` |
 | `ollama` | 本地/远程 Ollama | `Model`, `BaseURL` | `APIKey` | `127.0.0.1:11434` | 自动 `local_history` |
+| `openai` | OpenAI GPT 系列 | `APIKey`, `Model`, `BaseURL` | — | `api.openai.com/v1` | 自动 `local_history` |
+| `openai_compat` | OpenAI 兼容协议（第三方） | `APIKey`, `Model`, `BaseURL` | — | 无 | 自动 `local_history` |
 | `deepseek` | DeepSeek | `APIKey`, `Model`, `BaseURL` | — | `api.deepseek.com/v1` | 自动 `local_history` |
 | `moonshot` | Moonshot AI | `APIKey`, `Model`, `BaseURL` | — | `api.moonshot.cn/v1` | 自动 `local_history` |
 | `dashscope` | 阿里云百炼 | `APIKey`, `Model`, `BaseURL` | — | `dashscope.aliyuncs.com/compatible-mode/v1` | 自动 `local_history` |
 | `volcengine` | 火山引擎 | `APIKey`, `Model`, `BaseURL` | — | `ark.cn-beijing.volces.com/api/v3` | 自动 `local_history` |
 | `qianfan` | 百度千帆（文心一言） | `APIKey`, `Model`, `BaseURL` | — | `qianfan.baidubce.com/v2` | 自动 `local_history` |
-| `openai_compat` | OpenAI 兼容协议（第三方） | `APIKey`, `Model`, `BaseURL` | — | 无 | 自动 `local_history` |
+| `claude` | Anthropic Claude | `APIKey`, `Model`, `BaseURL` | — | `api.anthropic.com` | 自动 `local_history` |
+| `gemini` | Google Gemini | `APIKey`, `Model`, `BaseURL` | — | `generativelanguage.googleapis.com` | 自动 `local_history` |
+
+### 应用层接入
+
+| Provider | 说明 | 必填参数 | 可选参数 | 默认 BaseURL | SessionMode |
+|----------|------|---------|---------|-------------|-------------|
+| `bailian_app` | 阿里百炼应用接入（Responses API） | `APIKey`, `BaseURL` | `Model`, `ExtraBody`, `Path` | 无（需填写应用 Endpoint） | 自动 `local_history` |
 | `dify` | Dify 平台 | `APIKey`, `BaseURL` | `Model`, `ExtraBody` | `api.dify.ai/v1` | 自动 `remote_session` |
 | `ragflow` | RAGFlow | `APIKey`, `BaseURL`, `ExtraBody`(必含 `chat_id`) | — | 无 | 自动 `remote_session` |
 | `fastgpt` | FastGPT | `APIKey`, `BaseURL`, `SessionMode` | `ExtraBody` | 无 | 需显式指定 |
+
+### 通用适配
+
+| Provider | 说明 | 必填参数 | 可选参数 | 默认 BaseURL | SessionMode |
+|----------|------|---------|---------|-------------|-------------|
 | `generic` | 通用适配器 | `BaseURL`, `SessionMode`, `Request`, `Response` | `ChainFields`, `APIKey` | 无 | 需显式指定 |
 
 **说明**：
 - `BaseURL` 有默认值的 Provider 不传则直连官方 API，传入则切换到自建/代理地址
 - `SessionMode`：`local_history` = SDK 管理历史；`remote_session` = 服务端管理会话。标注"自动"的无需手动指定
-- `dify`/`ragflow`/`fastgpt` 的 `Model` 在平台侧配置，SDK 端可不传
+- `bailian_app`/`dify`/`ragflow`/`fastgpt` 的 `Model` 在平台侧配置，SDK 端可不传
 - `generic` 的 `Model` 语义由 `Request` 模板决定，不单独传
 - `ragflow` 需通过 `ExtraBody` 传入 `chat_id`；`fastgpt` 可通过 `ExtraBody` 传入 `detail`、`variables`
 

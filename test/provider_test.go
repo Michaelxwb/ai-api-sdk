@@ -268,6 +268,117 @@ func TestOpenAICompatSpec_AuthStrategyOverride(t *testing.T) {
 	}
 }
 
+func TestBailianAppSpec_BuildRequest(t *testing.T) {
+	spec := mustGetSpec(t, "bailian_app")
+	temp := float32(0.2)
+	maxTokens := 16
+	req := base.ChatRequest{
+		Model:       "test",
+		Messages:    []base.Message{{Role: "user", Content: "你好"}, {Role: "assistant", Content: "你好，我是助手"}},
+		Temperature: &temp,
+		MaxTokens:   &maxTokens,
+		Stream:      false,
+	}
+	opts := base.BuildOptions{
+		BaseURL: "https://dashscope.aliyuncs.com/api/v2/apps/agent/app-id/compatible-mode/v1",
+		ExtraBody: map[string]any{
+			"metadata": map[string]any{"trace_id": "t-1"},
+		},
+	}
+
+	httpReq, err := spec.BuildRequest(context.Background(), opts, req)
+	if err != nil {
+		t.Fatalf("BuildRequest error: %v", err)
+	}
+	if got := httpReq.URL.String(); got != "https://dashscope.aliyuncs.com/api/v2/apps/agent/app-id/compatible-mode/v1/responses" {
+		t.Fatalf("unexpected url: %s", got)
+	}
+	if ct := httpReq.Header.Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("unexpected content-type: %s", ct)
+	}
+
+	payload := decodeBodyMap(t, httpReq)
+	if _, ok := payload["model"]; ok {
+		t.Fatalf("expected model to be omitted for placeholder test model, got %v", payload["model"])
+	}
+	if payload["stream"] != false {
+		t.Fatalf("unexpected stream: %v", payload["stream"])
+	}
+	if got, ok := payload["temperature"].(float64); !ok || math.Abs(got-0.2) > 1e-6 {
+		t.Fatalf("unexpected temperature: %v", payload["temperature"])
+	}
+	if got, ok := payload["max_tokens"].(float64); !ok || got != 16 {
+		t.Fatalf("unexpected max_tokens: %v", payload["max_tokens"])
+	}
+	if _, ok := payload["metadata"].(map[string]any); !ok {
+		t.Fatalf("expected metadata map, got %T", payload["metadata"])
+	}
+	input, ok := payload["input"].([]any)
+	if !ok || len(input) != 2 {
+		t.Fatalf("unexpected input: %v", payload["input"])
+	}
+	item0, ok := input[0].(map[string]any)
+	if !ok || item0["role"] != "user" || item0["content"] != "你好" {
+		t.Fatalf("unexpected first input item: %v", input[0])
+	}
+}
+
+func TestBailianAppSpec_BuildRequest_NoDuplicateResponsesPath(t *testing.T) {
+	spec := mustGetSpec(t, "bailian_app")
+	req := base.ChatRequest{
+		Model:    "qwen-plus",
+		Messages: []base.Message{{Role: "user", Content: "hi"}},
+	}
+	opts := base.BuildOptions{
+		BaseURL: "https://dashscope.aliyuncs.com/api/v2/apps/agent/app-id/compatible-mode/v1/responses",
+	}
+
+	httpReq, err := spec.BuildRequest(context.Background(), opts, req)
+	if err != nil {
+		t.Fatalf("BuildRequest error: %v", err)
+	}
+	if got := httpReq.URL.String(); got != "https://dashscope.aliyuncs.com/api/v2/apps/agent/app-id/compatible-mode/v1/responses" {
+		t.Fatalf("unexpected url: %s", got)
+	}
+}
+
+func TestBailianAppSpec_ParseResponse(t *testing.T) {
+	spec := mustGetSpec(t, "bailian_app")
+	t.Run("output_text", func(t *testing.T) {
+		assertParseResponse(t, spec, `{"output_text":"hello","usage":{"input_tokens":3,"output_tokens":5,"total_tokens":8}}`,
+			"hello", "", &base.Usage{PromptTokens: 3, CompletionTokens: 5, TotalTokens: 8})
+	})
+	t.Run("output_content_fallback", func(t *testing.T) {
+		assertParseResponse(t, spec, `{"output":[{"content":[{"type":"output_text","text":"hel"},{"type":"output_text","text":"lo"}]}]}`,
+			"hello", "", nil)
+	})
+	t.Run("invalid", func(t *testing.T) {
+		if _, err := spec.ParseResponse(newHTTPResponse("{")); err == nil {
+			t.Fatalf("expected error for invalid json")
+		}
+	})
+	t.Run("nil", func(t *testing.T) {
+		if _, err := spec.ParseResponse(nil); err == nil {
+			t.Fatalf("expected error for nil response")
+		}
+	})
+}
+
+func TestBailianAppSpec_AuthStrategyOverride(t *testing.T) {
+	spec := mustGetSpec(t, "bailian_app")
+	strategy, ok := spec.AuthStrategyOverride(&auth.Credential{AuthType: auth.AuthTypeAPIKey, APIKey: "key"})
+	if !ok {
+		t.Fatalf("expected auth override")
+	}
+	bearer, ok := strategy.(auth.BearerTokenStrategy)
+	if !ok {
+		t.Fatalf("expected BearerTokenStrategy, got %T", strategy)
+	}
+	if bearer.Token != "key" {
+		t.Fatalf("unexpected token: %q", bearer.Token)
+	}
+}
+
 func TestClaudeSpec_BuildRequest(t *testing.T) {
 	spec := mustGetSpec(t, "claude")
 	req := base.ChatRequest{

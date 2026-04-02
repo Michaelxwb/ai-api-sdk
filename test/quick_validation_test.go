@@ -108,4 +108,29 @@ func TestQuickValidation(t *testing.T) {
 			t.Fatal("expected non-nil QuickSession")
 		}
 	})
+
+	t.Run("bailian_app requires BaseURL but not SessionMode", func(t *testing.T) {
+		_, err := cli.Quick(client.ProviderConfig{
+			Provider: "bailian_app",
+			APIKey:   "token",
+		})
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+		if !strings.Contains(err.Error(), "requires BaseURL") {
+			t.Errorf("unexpected error: %v", err)
+		}
+
+		qs, err := cli.Quick(client.ProviderConfig{
+			Provider: "bailian_app",
+			APIKey:   "token",
+			BaseURL:  "https://dashscope.aliyuncs.com/api/v2/apps/agent/app-id/compatible-mode/v1",
+		})
+		if err != nil {
+			t.Fatalf("unexpected validation error for bailian_app: %v", err)
+		}
+		if qs == nil {
+			t.Fatal("expected non-nil QuickSession")
+		}
+	})
 }

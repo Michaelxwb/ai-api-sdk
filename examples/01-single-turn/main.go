@@ -20,9 +20,9 @@ func main() {
 	// 场景1：流式对话（默认）
 	fmt.Println("\n场景1：流式对话")
 	qs, err := cli.Quick(client.ProviderConfig{
-		Provider: "qianfan",
+		BaseURL:  "https://dashscope.aliyuncs.com/api/v2/apps/agent/a3edddb38bc747dfbe62b2de746972ab/compatible-mode/v1",
+		Provider: "bailian_app",
 		APIKey:   "sk-TOKEN",
-		Model:    "deepseek-r1-250528",
 	})
 	if err != nil {
 		log.Fatalf("Error: %v", err)
@@ -41,10 +41,11 @@ func main() {
 	fmt.Println("\n场景2：非流式对话")
 	noStream := false
 	qs2, err := cli.Quick(client.ProviderConfig{
-		Provider: "qianfan",
-		APIKey:   "sk-TOKEN",
-		Model:    "deepseek-r1-250528",
-		Stream:   &noStream,
+		BaseURL:    "https://dashscope.aliyuncs.com/api/v2/apps/agent/a3edddb38bc747dfbe62b2de746972ab/compatible-mode/v1",
+		Provider:   "bailian_app",
+		APIKey:     "sk-TOKEN",
+		Stream:     &noStream, // bailian_app 当前为同步文本
+		TimeoutSec: 120,
 	})
 	if err != nil {
 		log.Fatalf("Error: %v", err)

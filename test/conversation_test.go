@@ -130,6 +130,18 @@ func TestConversationModeConstants(t *testing.T) {
 	}
 }
 
+func TestResolveConversationAndStreamDefaults(t *testing.T) {
+	if got := client.ResolveConversationMode("bailian_app"); got != client.ConversationModeLocalHistory {
+		t.Errorf("unexpected conversation mode for bailian_app: %q", got)
+	}
+	if got := client.ResolveDefaultStream("bailian_app"); got {
+		t.Errorf("expected default stream=false for bailian_app")
+	}
+	if got := client.ResolveDefaultStream("openai"); !got {
+		t.Errorf("expected default stream=true for openai")
+	}
+}
+
 // Test OnErrorStrategy constants
 func TestOnErrorStrategyConstants(t *testing.T) {
 	if client.OnErrorAbort != "abort" {

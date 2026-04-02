@@ -20,7 +20,7 @@ const (
 func ResolveConversationMode(provider string) ConversationMode {
 	switch provider {
 	case "openai", "claude", "gemini", "ollama",
-		"deepseek", "moonshot", "dashscope", "volcengine", "qianfan", "openai_compat":
+		"deepseek", "moonshot", "dashscope", "volcengine", "qianfan", "openai_compat", "bailian_app":
 		return ConversationModeLocalHistory
 	case "dify", "ragflow":
 		return ConversationModeRemoteSession
@@ -30,8 +30,12 @@ func ResolveConversationMode(provider string) ConversationMode {
 }
 
 // ResolveDefaultStream returns the default streaming mode for a provider.
-// Currently all registered providers support streaming, so this always returns true.
+// Most providers stream by default; some providers are synchronous-first.
 func ResolveDefaultStream(provider string) bool {
+	switch provider {
+	case "bailian_app":
+		return false
+	}
 	return true
 }
 
