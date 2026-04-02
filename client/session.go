@@ -128,8 +128,10 @@ func WithHistoryWindow(hw HistoryWindow) SessionOption {
 	}
 }
 
-// WithTimeout 设置对话请求的超时时间，应用于 Chat 和 ChatStream。
-// 0 或不设置时使用 Client.HTTP.Timeout 默认值（60s）。
+// WithTimeout 设置非流式对话请求（Chat）的超时时间。
+// 流式请求（ChatStream）不受此设置影响，由 chatWithStream 内部管理（默认 5 分钟），
+// 调用方可通过传入带 deadline 的 ctx 自行控制流式超时。
+// 0 或不设置时，非流式请求使用 Client.HTTP.Timeout 默认值（60s）。
 func WithTimeout(d time.Duration) SessionOption {
 	return func(s *Session) {
 		s.timeout = d
@@ -474,14 +476,14 @@ func (s *Session) truncateHistory(msgs []base.Message) []base.Message {
 	return session.Truncate(msgs, hw.MaxMessages, hw.MaxTokens)
 }
 
-// ChatStream 发送流式对话请求
+// ChatStream 发送流式对话请求。
+// 注意：s.timeout 不适用于流式请求。流式超时由 chatWithStream 内部管理（默认 5 分钟），
+// 调用方可通过传入带 deadline 的 ctx 自行控制。
 func (s *Session) ChatStream(ctx context.Context, req base.ChatRequest) (<-chan streaming.StreamChunk, error) {
-	var cancel context.CancelFunc
-	if s.timeout > 0 {
-		if _, ok := ctx.Deadline(); !ok {
-			ctx, cancel = context.WithTimeout(ctx, s.timeout)
-		}
-	}
+	// Streaming sessions should not use the short request timeout (designed for
+	// non-streaming full-response waits). chatWithStream provides its own 5-min
+	// default when ctx has no deadline. Callers needing a custom streaming timeout
+	// should pass a context with their own deadline.
 
 	startNewChat := req.StartNewChat || s.startNewChat
 
@@ -497,23 +499,7 @@ func (s *Session) ChatStream(ctx context.Context, req base.ChatRequest) (<-chan 
 	}
 
 	if err != nil {
-		if cancel != nil {
-			cancel()
-		}
 		return nil, err
-	}
-
-	// If we created a timeout context, wrap channel to cancel when stream ends
-	if cancel != nil {
-		out := make(chan streaming.StreamChunk, 16)
-		go func() {
-			defer cancel()
-			defer close(out)
-			for chunk := range rawCh {
-				out <- chunk
-			}
-		}()
-		return out, nil
 	}
 
 	return rawCh, nil

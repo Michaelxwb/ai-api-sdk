@@ -96,7 +96,14 @@ func (c *Client) chatWith(ctx context.Context, cred *auth.Credential, pc *config
 		Strategy: prep.strategy,
 		Cred:     prep.cred,
 	}
-	httpClient := &http.Client{Transport: transport, Timeout: c.HTTP.Timeout}
+	// If context already carries a deadline (set by Session.Chat timeout),
+	// disable http.Client.Timeout to avoid a shorter hard cap overriding it.
+	// This mirrors chatWithStream which always uses Timeout: 0.
+	timeout := c.HTTP.Timeout
+	if _, ok := ctx.Deadline(); ok {
+		timeout = 0
+	}
+	httpClient := &http.Client{Transport: transport, Timeout: timeout}
 	resp, err := httpClient.Do(prep.httpReq)
 	if err != nil {
 		return base.ChatResponse{}, err
