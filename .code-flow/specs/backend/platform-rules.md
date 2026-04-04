@@ -28,8 +28,8 @@
 
 ```
 Provider 的默认 ConversationMode：
-  local_history（SDK 本地维护）：openai / claude / gemini / ollama / deepseek / moonshot / dashscope / volcengine / openai_compat
-  remote_session（provider 侧维护）：dify / ragflow
+  local_history（SDK 本地维护）：openai / claude / gemini / ollama / deepseek / moonshot / dashscope / volcengine / qianfan / openai_compat / bailian_app
+  remote_session（provider 侧维护）：dify / ragflow / qianfan_app
   ""（必须调用方显式指定）：fastgpt / generic / plugin 等
 
 如何选择？

@@ -24,9 +24,10 @@ func main() {
 	})
 
 	qs, err := cli.Quick(client.ProviderConfig{
-		Provider: "bailian_app",
-		APIKey:   "sk-TOKEN",
-		BaseURL:  "https://dashscope.aliyuncs.com/api/v2/apps/agent/a3edddb38bc747dfbe62b2de746972ab/compatible-mode/v1",
+		BaseURL:  "https://qianfan.baidubce.com/v2/app/conversation/runs",
+		Provider: "qianfan_app",
+		APIKey:   "bce-v3/ALTAK-dzGBsXDJ8eGD9FaOc58t9/3d3a92846e9a225c97600d184f2c073be999a830",
+		Model:    "ad36f5bd-dff4-4a63-81bb-72a3768b4b32",
 		Store:    store,
 	})
 	if err != nil {

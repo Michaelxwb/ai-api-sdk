@@ -83,10 +83,20 @@ providers:
     type: "deepseek"
     auth_ref: "deepseek_key"
 
-  # 百度千帆（文心一言 ERNIE）
+  # 百度千帆（文心一言 ERNIE）— 基模 API
   - name: "qianfan"
     type: "qianfan"
     auth_ref: "qianfan_key"
+
+  # 百度千帆应用接入 — 应用层 API（conversation/runs）
+  - name: "qianfan_app"
+    type: "qianfan_app"
+    auth_ref: "qianfan_app_key"
+    # 可选：覆盖默认 BaseURL（默认 qianfan.baidubce.com/v2/app/conversation/runs）
+    # base_url: "https://qianfan.baidubce.com/v2/app/conversation/runs"
+    # extra_body:
+    #   end_user_id: "user-123"
+    #   file_ids: ["file-abc"]
 
   # Optional Dify
   - name: "dify"
@@ -122,13 +132,11 @@ providers:
         team: "demo"
         channel: "examples"
 
-  # RAGFlow (chat_id is required in extra_body, it identifies the Chat Assistant)
+  # RAGFlow (BaseURL must be a full endpoint with chat_id in path)
   - name: "ragflow"
     type: "ragflow"
-    base_url: "http://ragflow.example.com"  # 自建 RAGFlow 地址
+    base_url: "http://ragflow.example.com/api/v1/chats_openai/your-chat-assistant-id/chat/completions"
     auth_ref: "ragflow_key"
-    extra_body:
-      chat_id: "your-chat-assistant-id"  # 必填：RAGFlow Chat Assistant ID
 
 # Credentials (referenced by providers[].auth_ref).
 credentials:
@@ -184,6 +192,11 @@ credentials:
     provider: "qianfan"
     auth_type: "bearer_token"
     access_token: "your-qianfan-api-key"
+
+  - id: "qianfan_app_key"
+    provider: "qianfan_app"
+    auth_type: "api_key"
+    api_key: "your-qianfan-app-api-key"
 
   - id: "dify_key"
     provider: "dify"

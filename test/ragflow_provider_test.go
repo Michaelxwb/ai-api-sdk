@@ -15,24 +15,21 @@ import (
 func TestRAGFlowSpec_BuildRequest(t *testing.T) {
 	spec := mustGetSpec(t, "ragflow")
 
-	t.Run("normal_with_chat_id", func(t *testing.T) {
+	t.Run("normal_with_full_endpoint_base_url", func(t *testing.T) {
 		req := base.ChatRequest{
 			Messages:  []base.Message{{Role: "user", Content: "what is RAGFlow?"}},
 			Stream:    true,
 			SessionID: "sess-1",
 		}
 		opts := base.BuildOptions{
-			BaseURL: "https://ragflow.example.com",
-			ExtraBody: map[string]any{
-				"chat_id": "chat-abc",
-			},
+			BaseURL: "https://ragflow.example.com/api/v1/chats_openai/chat-abc/chat/completions",
 		}
 
 		httpReq, err := spec.BuildRequest(context.Background(), opts, req)
 		if err != nil {
 			t.Fatalf("BuildRequest error: %v", err)
 		}
-		if got := httpReq.URL.String(); got != "https://ragflow.example.com/api/v1/chats/chat-abc/completions" {
+		if got := httpReq.URL.String(); got != "https://ragflow.example.com/api/v1/chats_openai/chat-abc/chat/completions" {
 			t.Fatalf("unexpected url: %s", got)
 		}
 		if httpReq.Header.Get("Accept") != "text/event-stream" {
@@ -49,41 +46,61 @@ func TestRAGFlowSpec_BuildRequest(t *testing.T) {
 		if payload["session_id"] != "sess-1" {
 			t.Fatalf("unexpected session_id: %v", payload["session_id"])
 		}
-		// chat_id should not appear in request body.
 		if _, ok := payload["chat_id"]; ok {
 			t.Fatalf("chat_id should not be in request body")
 		}
 	})
 
-	t.Run("missing_chat_id", func(t *testing.T) {
+	t.Run("missing_full_endpoint_base_url", func(t *testing.T) {
 		req := base.ChatRequest{
 			Messages: []base.Message{{Role: "user", Content: "hi"}},
 		}
-		opts := base.BuildOptions{
-			BaseURL: "https://ragflow.example.com",
-		}
+		opts := base.BuildOptions{}
 
 		_, err := spec.BuildRequest(context.Background(), opts, req)
 		if err == nil {
-			t.Fatalf("expected error for missing chat_id")
+			t.Fatalf("expected error for missing base_url")
 		}
-		if !strings.Contains(err.Error(), "chat_id is required") {
-			t.Fatalf("expected 'chat_id is required' in error, got: %v", err)
+		if !strings.Contains(err.Error(), "full endpoint BaseURL is required") {
+			t.Fatalf("expected full endpoint base_url error, got: %v", err)
 		}
 	})
 
-	t.Run("empty_chat_id", func(t *testing.T) {
+	t.Run("path_override_not_supported", func(t *testing.T) {
 		req := base.ChatRequest{
 			Messages: []base.Message{{Role: "user", Content: "hi"}},
 		}
 		opts := base.BuildOptions{
-			BaseURL:   "https://ragflow.example.com",
-			ExtraBody: map[string]any{"chat_id": "  "},
+			BaseURL: "https://ragflow.example.com/api/v1/chats_openai/chat-abc/chat/completions",
+			Path:    "/api/v1/chats_openai/chat-def/chat/completions",
 		}
 
 		_, err := spec.BuildRequest(context.Background(), opts, req)
 		if err == nil {
-			t.Fatalf("expected error for empty chat_id")
+			t.Fatalf("expected error for path override")
+		}
+		if !strings.Contains(err.Error(), "Path override is not supported") {
+			t.Fatalf("expected path override error, got: %v", err)
+		}
+	})
+
+	t.Run("chat_id_in_extra_body_not_supported", func(t *testing.T) {
+		req := base.ChatRequest{
+			Messages: []base.Message{{Role: "user", Content: "hi"}},
+		}
+		opts := base.BuildOptions{
+			BaseURL: "https://ragflow.example.com/api/v1/chats_openai/chat-abc/chat/completions",
+			ExtraBody: map[string]any{
+				"chat_id": "chat-abc",
+			},
+		}
+
+		_, err := spec.BuildRequest(context.Background(), opts, req)
+		if err == nil {
+			t.Fatalf("expected error for chat_id in extra body")
+		}
+		if !strings.Contains(err.Error(), "chat_id in ExtraBody is not supported") {
+			t.Fatalf("expected chat_id extra body error, got: %v", err)
 		}
 	})
 
@@ -92,8 +109,7 @@ func TestRAGFlowSpec_BuildRequest(t *testing.T) {
 			Messages: []base.Message{{Role: "user", Content: "hi"}},
 		}
 		opts := base.BuildOptions{
-			BaseURL:   "https://ragflow.example.com",
-			ExtraBody: map[string]any{"chat_id": "chat-1"},
+			BaseURL: "https://ragflow.example.com/api/v1/chats_openai/chat-1/chat/completions",
 		}
 
 		httpReq, err := spec.BuildRequest(context.Background(), opts, req)
@@ -115,8 +131,7 @@ func TestRAGFlowSpec_BuildRequest(t *testing.T) {
 			},
 		}
 		opts := base.BuildOptions{
-			BaseURL:   "https://ragflow.example.com",
-			ExtraBody: map[string]any{"chat_id": "chat-1"},
+			BaseURL: "https://ragflow.example.com/api/v1/chats_openai/chat-1/chat/completions",
 		}
 
 		httpReq, err := spec.BuildRequest(context.Background(), opts, req)
@@ -134,8 +149,7 @@ func TestRAGFlowSpec_BuildRequest(t *testing.T) {
 			Messages: []base.Message{},
 		}
 		opts := base.BuildOptions{
-			BaseURL:   "https://ragflow.example.com",
-			ExtraBody: map[string]any{"chat_id": "chat-1"},
+			BaseURL: "https://ragflow.example.com/api/v1/chats_openai/chat-1/chat/completions",
 		}
 
 		httpReq, err := spec.BuildRequest(context.Background(), opts, req)
@@ -153,10 +167,9 @@ func TestRAGFlowSpec_BuildRequest(t *testing.T) {
 			Messages: []base.Message{{Role: "user", Content: "hi"}},
 		}
 		opts := base.BuildOptions{
-			BaseURL: "https://ragflow.example.com",
+			BaseURL: "https://ragflow.example.com/api/v1/chats_openai/chat-1/chat/completions",
 			ExtraBody: map[string]any{
-				"chat_id": "chat-1",
-				"top_k":   float64(5),
+				"top_k": float64(5),
 			},
 		}
 
@@ -176,8 +189,7 @@ func TestRAGFlowSpec_BuildRequest(t *testing.T) {
 			Stream:   false,
 		}
 		opts := base.BuildOptions{
-			BaseURL:   "https://ragflow.example.com",
-			ExtraBody: map[string]any{"chat_id": "chat-1"},
+			BaseURL: "https://ragflow.example.com/api/v1/chats_openai/chat-1/chat/completions",
 		}
 
 		httpReq, err := spec.BuildRequest(context.Background(), opts, req)

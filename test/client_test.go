@@ -998,6 +998,79 @@ func TestBailianApp_TestWith(t *testing.T) {
 	}
 }
 
+func TestQianfanApp_QuickMultiTurn(t *testing.T) {
+	var mu sync.Mutex
+	var receivedConvIDs []string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		data, _ := io.ReadAll(r.Body)
+		var payload map[string]any
+		_ = json.Unmarshal(data, &payload)
+
+		convID, _ := payload["conversation_id"].(string)
+		mu.Lock()
+		receivedConvIDs = append(receivedConvIDs, convID)
+		mu.Unlock()
+
+		// Server always assigns its own conversation_id (simulates real Qianfan API behavior).
+		respConvID := "conv-new-001"
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		fmt.Fprintf(w, "data: {\"answer\":\"hi\",\"conversation_id\":%q,\"is_completion\":false}\n\n", respConvID)
+		fmt.Fprintf(w, "data: {\"answer\":\"\",\"conversation_id\":%q,\"is_completion\":true,\"usage\":{\"prompt_tokens\":1,\"completion_tokens\":2,\"total_tokens\":3}}\n\n", respConvID)
+	}))
+	defer srv.Close()
+
+	cli := client.New()
+	qs, err := cli.Quick(client.ProviderConfig{
+		Provider: "qianfan_app",
+		BaseURL:  srv.URL,
+		APIKey:   "test-key",
+		Model:    "app-test",
+	})
+	if err != nil {
+		t.Fatalf("Quick error: %v", err)
+	}
+
+	ctx := context.Background()
+
+	// Turn 1: no conversation_id sent
+	ch1, err := qs.SendText(ctx, "hello")
+	if err != nil {
+		t.Fatalf("SendText turn 1 error: %v", err)
+	}
+	for chunk := range ch1 {
+		if chunk.Error != nil {
+			t.Fatalf("stream error turn 1: %v", chunk.Error)
+		}
+	}
+
+	// Turn 2: should send conversation_id from turn 1
+	ch2, err := qs.SendText(ctx, "follow up")
+	if err != nil {
+		t.Fatalf("SendText turn 2 error: %v", err)
+	}
+	for chunk := range ch2 {
+		if chunk.Error != nil {
+			t.Fatalf("stream error turn 2: %v", chunk.Error)
+		}
+	}
+
+	mu.Lock()
+	defer mu.Unlock()
+	if len(receivedConvIDs) < 2 {
+		t.Fatalf("expected at least 2 requests, got %d", len(receivedConvIDs))
+	}
+	// First turn: no conversation_id sent (remote_session waits for server to assign one).
+	if receivedConvIDs[0] != "" {
+		t.Fatalf("first turn should not send conversation_id, got %q", receivedConvIDs[0])
+	}
+	// Second turn: should use server-returned conversation_id, replacing the local UUID.
+	if receivedConvIDs[1] != "conv-new-001" {
+		t.Fatalf("second turn should send conversation_id=conv-new-001, got %q", receivedConvIDs[1])
+	}
+}
+
 func parseSimpleJSONResponse(resp *http.Response) (base.ChatResponse, error) {
 	data, err := io.ReadAll(resp.Body)
 	if err != nil {

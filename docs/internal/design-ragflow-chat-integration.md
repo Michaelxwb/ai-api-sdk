@@ -85,7 +85,7 @@
 
 | 字段名 | 字段类型 | 必填 | 来源 | 说明 |
 |--------|---------|------|------|------|
-| chat_id | string | Y | ExtraBody | RAGFlow Chat Assistant ID，用于 URL 路径拼接 |
+| chat_id | string | Y | BaseURL 路径参数 | RAGFlow Chat Assistant ID，写入完整 endpoint 路径 |
 | question | string | Y | 自动提取 | 从 `ChatRequest.Messages` 最后一条 user 消息提取 |
 | stream | bool | N | ChatRequest.Stream | 是否启用流式，默认 false |
 | session_id | string | N | ChatRequest.SessionID | 多轮对话会话 ID，首轮为空由 RAGFlow 自动生成 |
@@ -126,7 +126,7 @@
 
 | ID | 类型 | 描述 |
 |----|------|------|
-| RULE-01 | 系统约束 | chat_id 必须通过 ExtraBody 传入，不可为空 |
+| RULE-01 | 系统约束 | BaseURL 必须填写完整 endpoint，并在路径中包含 chat_id |
 | RULE-02 | 业务规则 | 首轮对话不传 session_id，由 RAGFlow 自动生成 |
 | RULE-03 | 系统约束 | 错误前缀统一使用 `ragflow:` |
 | RULE-04 | 业务规则 | APIKey 类型凭据自动转为 Bearer Token 鉴权 |
@@ -145,7 +145,7 @@
 
 | 场景ID | 功能ID | 触发条件 | 系统行为 |
 |--------|--------|---------|---------|
-| E-01 | FEAT-01 | chat_id 为空 | 返回 `ragflow: chat_id is required` 错误 |
+| E-01 | FEAT-01 | BaseURL 为空或不完整 | 返回 `ragflow: full endpoint BaseURL is required` 错误 |
 | E-02 | FEAT-01 | API Key 无效 | 返回 HTTP 错误（透传 RAGFlow 响应） |
 | E-03 | FEAT-01 | 响应 code != 0 | 返回 `ragflow: server error` + message |
 | E-04 | FEAT-02 | 流式帧 JSON 解析失败 | 返回 error chunk，流终止 |
@@ -245,7 +245,7 @@ graph LR
 
 | 接口ID | 名称 | 方法 | 路径 | 说明 |
 |--------|------|------|------|------|
-| API-01 | RAGFlow 对话 | POST | `/api/v1/chats/{chat_id}/completions` | 非流式/流式对话 |
+| API-01 | RAGFlow 对话 | POST | `/api/v1/chats_openai/{chat_id}/chat/completions` | 非流式/流式对话 |
 
 ---
 
@@ -256,7 +256,7 @@ graph LR
 **接口契约**
 
 ```
-POST /api/v1/chats/{chat_id}/completions
+POST /api/v1/chats_openai/{chat_id}/chat/completions
 Content-Type: application/json
 Authorization: Bearer {api_key}
 ```
@@ -269,7 +269,7 @@ Authorization: Bearer {api_key}
 | stream | bool | N | true/false | 是否流式 |
 | session_id | string | N | 首轮为空 | 多轮对话 ID |
 
-> `chat_id` 为 URL 路径参数，从 `ExtraBody["chat_id"]` 提取。
+> `chat_id` 为 URL 路径参数，直接包含在 BaseURL 完整 endpoint 中。
 
 **请求示例**
 
@@ -332,8 +332,8 @@ data:{"code": 102, "message": "unauthorized"}
 
 ```mermaid
 flowchart TD
-    A[接收 ChatRequest] --> B{chat_id 存在?}
-    B -->|否| C["返回 ragflow: chat_id is required"]
+    A[接收 ChatRequest] --> B{BaseURL 是完整 endpoint?}
+    B -->|否| C["返回 ragflow: full endpoint BaseURL is required"]
     B -->|是| D[提取 question]
     D --> E[构建 HTTP Request]
     E --> F{stream?}
@@ -365,7 +365,7 @@ flowchart TD
 |---------|------|------|:-:|:-:|:-:|:---:|---------|
 | 响应 JSON 解析失败 | 请求失败 | RAGFlow 版本变更导致格式变化 | 6 | 3 | 3 | 54 | 错误信息包含原始 body |
 | 流式连接中断无终止帧 | 流未正常关闭 | 网络抖动 | 5 | 4 | 2 | 40 | EOF 视为 graceful close |
-| chat_id 为空 | 请求 404 | 用户配置遗漏 | 4 | 5 | 1 | 20 | BuildRequest 前置校验 |
+| BaseURL 未包含 chat_id | 请求 404 | 用户配置遗漏 | 4 | 5 | 1 | 20 | BuildRequest 前置校验 |
 
 #### 3.5.3 测试方案
 

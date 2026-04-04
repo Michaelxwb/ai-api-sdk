@@ -181,7 +181,9 @@ func (c *Client) Quick(cfg ProviderConfig) (*QuickSession, error) {
 		opts = append(opts, WithStore(store), WithAutoID())
 	case "remote_session":
 		opts = append(opts, WithConversationMode(ConversationModeRemoteSession))
-		opts = append(opts, WithStore(nil))
+		if cfg.Store != nil {
+			opts = append(opts, WithStore(cfg.Store))
+		}
 	default:
 		// Unknown mode (fastgpt/generic without explicit mode) -- no ConversationMode, legacy path.
 		if cfg.Store != nil {

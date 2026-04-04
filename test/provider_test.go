@@ -785,3 +785,167 @@ func TestPluginSpec_AuthStrategyOverride(t *testing.T) {
 		t.Fatalf("expected NoAuth, got %T", strategy)
 	}
 }
+
+func TestQianfanAppSpec_BuildRequest(t *testing.T) {
+	spec := mustGetSpec(t, "qianfan_app")
+	req := base.ChatRequest{
+		Model:     "app-abc123",
+		Messages:  []base.Message{{Role: "system", Content: "ignored"}, {Role: "user", Content: "你好"}},
+		Stream:    true,
+		SessionID: "conv-xyz",
+	}
+	opts := base.BuildOptions{
+		ExtraBody: map[string]any{
+			"end_user_id": "u-1",
+			"file_ids":    []string{"f1"},
+		},
+	}
+
+	httpReq, err := spec.BuildRequest(context.Background(), opts, req)
+	if err != nil {
+		t.Fatalf("BuildRequest error: %v", err)
+	}
+	if got := httpReq.URL.String(); got != "https://qianfan.baidubce.com/v2/app/conversation/runs" {
+		t.Fatalf("unexpected url: %s", got)
+	}
+	if ct := httpReq.Header.Get("Content-Type"); ct != "application/json" {
+		t.Fatalf("unexpected content-type: %s", ct)
+	}
+
+	payload := decodeBodyMap(t, httpReq)
+	if payload["app_id"] != "app-abc123" {
+		t.Fatalf("unexpected app_id: %v", payload["app_id"])
+	}
+	if payload["query"] != "你好" {
+		t.Fatalf("unexpected query: %v", payload["query"])
+	}
+	if payload["stream"] != true {
+		t.Fatalf("unexpected stream: %v", payload["stream"])
+	}
+	if payload["conversation_id"] != "conv-xyz" {
+		t.Fatalf("unexpected conversation_id: %v", payload["conversation_id"])
+	}
+	if payload["end_user_id"] != "u-1" {
+		t.Fatalf("unexpected end_user_id: %v", payload["end_user_id"])
+	}
+}
+
+func TestQianfanAppSpec_BuildRequest_SkipsTestModel(t *testing.T) {
+	spec := mustGetSpec(t, "qianfan_app")
+	req := base.ChatRequest{
+		Model:    "test",
+		Messages: []base.Message{{Role: "user", Content: "hi"}},
+	}
+	opts := base.BuildOptions{}
+
+	httpReq, err := spec.BuildRequest(context.Background(), opts, req)
+	if err != nil {
+		t.Fatalf("BuildRequest error: %v", err)
+	}
+	payload := decodeBodyMap(t, httpReq)
+	if _, ok := payload["app_id"]; ok {
+		t.Fatalf("expected app_id to be omitted for test model, got %v", payload["app_id"])
+	}
+	if payload["conversation_id"] != nil {
+		t.Fatalf("expected no conversation_id when SessionID is empty, got %v", payload["conversation_id"])
+	}
+}
+
+func TestQianfanAppSpec_ParseResponse(t *testing.T) {
+	spec := mustGetSpec(t, "qianfan_app")
+	t.Run("answer_with_conversation_id_and_usage", func(t *testing.T) {
+		assertParseResponse(t, spec,
+			`{"answer":"你好世界","conversation_id":"conv-001","usage":{"prompt_tokens":5,"completion_tokens":10,"total_tokens":15}}`,
+			"你好世界", "conv-001", &base.Usage{PromptTokens: 5, CompletionTokens: 10, TotalTokens: 15})
+	})
+	t.Run("answer_without_usage", func(t *testing.T) {
+		assertParseResponse(t, spec, `{"answer":"ok","conversation_id":"c2"}`, "ok", "c2", nil)
+	})
+	t.Run("invalid_json", func(t *testing.T) {
+		if _, err := spec.ParseResponse(newHTTPResponse("{")); err == nil {
+			t.Fatalf("expected error for invalid json")
+		}
+	})
+	t.Run("nil_response", func(t *testing.T) {
+		if _, err := spec.ParseResponse(nil); err == nil {
+			t.Fatalf("expected error for nil response")
+		}
+	})
+}
+
+func TestQianfanAppSpec_ParseStreamResponse(t *testing.T) {
+	spec := mustGetSpec(t, "qianfan_app")
+	streamSpec, ok := spec.(streaming.ProviderStreamSpec)
+	if !ok {
+		t.Fatalf("qianfan_app does not implement ProviderStreamSpec")
+	}
+
+	t.Run("incremental_text_with_conversation_id_and_usage", func(t *testing.T) {
+		payload := "" +
+			"data: {\"answer\":\"hello \",\"conversation_id\":\"conv-1\",\"is_completion\":false}\n\n" +
+			"data: {\"answer\":\"world\",\"conversation_id\":\"conv-1\",\"is_completion\":false}\n\n" +
+			"data: {\"answer\":\"\",\"conversation_id\":\"conv-1\",\"is_completion\":true,\"usage\":{\"prompt_tokens\":3,\"completion_tokens\":7,\"total_tokens\":10}}\n\n"
+
+		resp := newStreamResponse(payload)
+		ch, err := streamSpec.ParseStreamResponse(resp)
+		if err != nil {
+			t.Fatalf("ParseStreamResponse error: %v", err)
+		}
+
+		chunks := collectChunks(ch)
+		if len(chunks) != 3 {
+			t.Fatalf("expected 3 chunks, got %d: %+v", len(chunks), chunks)
+		}
+		if chunks[0].Text != "hello " || chunks[0].SessionID != "conv-1" {
+			t.Fatalf("unexpected first chunk: text=%q session=%q", chunks[0].Text, chunks[0].SessionID)
+		}
+		if chunks[1].Text != "world" || chunks[1].SessionID != "conv-1" {
+			t.Fatalf("unexpected second chunk: text=%q session=%q", chunks[1].Text, chunks[1].SessionID)
+		}
+		if !chunks[2].Done {
+			t.Fatalf("expected done on last chunk")
+		}
+		if chunks[2].SessionID != "conv-1" {
+			t.Fatalf("expected SessionID on done chunk, got %q", chunks[2].SessionID)
+		}
+		if chunks[2].Usage == nil {
+			t.Fatalf("expected usage on done chunk")
+		}
+		if chunks[2].Usage.PromptTokens != 3 || chunks[2].Usage.CompletionTokens != 7 || chunks[2].Usage.TotalTokens != 10 {
+			t.Fatalf("unexpected usage: %+v", chunks[2].Usage)
+		}
+	})
+
+	t.Run("nil_response", func(t *testing.T) {
+		_, err := streamSpec.ParseStreamResponse(nil)
+		if err == nil {
+			t.Fatalf("expected error for nil response")
+		}
+	})
+}
+
+func TestQianfanAppSpec_AuthStrategyOverride(t *testing.T) {
+	spec := mustGetSpec(t, "qianfan_app")
+	t.Run("apikey_to_bearer", func(t *testing.T) {
+		strategy, ok := spec.AuthStrategyOverride(&auth.Credential{AuthType: auth.AuthTypeAPIKey, APIKey: "my-key"})
+		if !ok {
+			t.Fatalf("expected auth override")
+		}
+		bearer, ok := strategy.(auth.BearerTokenStrategy)
+		if !ok {
+			t.Fatalf("expected BearerTokenStrategy, got %T", strategy)
+		}
+		if bearer.Token != "my-key" {
+			t.Fatalf("unexpected token: %q", bearer.Token)
+		}
+	})
+	t.Run("nil_credential", func(t *testing.T) {
+		strategy, ok := spec.AuthStrategyOverride(nil)
+		if !ok {
+			t.Fatalf("expected auth override for nil cred")
+		}
+		if _, ok := strategy.(auth.NoAuth); !ok {
+			t.Fatalf("expected NoAuth for nil cred, got %T", strategy)
+		}
+	})
+}

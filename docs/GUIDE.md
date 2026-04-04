@@ -332,10 +332,6 @@ qs := client.New().Quick(client.ProviderConfig{
 qs := client.New().Quick(client.ProviderConfig{
     Provider: "ragflow",
     APIKey:   "ragflow-xxx",
-    BaseURL:  "https://ragflow.example.com/api",
-    ExtraBody: map[string]any{
-        "chat_id": "your-chat-id",
-    },
+    BaseURL:  "https://ragflow.example.com/api/v1/chats_openai/your-chat-id/chat/completions",
 })
 ```
-

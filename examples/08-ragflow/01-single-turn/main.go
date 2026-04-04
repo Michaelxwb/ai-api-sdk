@@ -17,15 +17,12 @@ func main() {
 
 	fmt.Println("=== RAGFlow 单轮对话示例（Quick API）===")
 	fmt.Println("说明：RAGFlow 为 remote_session 模式，session_id 由服务端生成，SDK 自动提取。")
-	fmt.Println("注意：chat_id 需通过 ExtraBody 传入。")
+	fmt.Println("注意：BaseURL 必须填写完整 endpoint，并在路径中包含 chat_id。")
 
 	qs, err := cli.Quick(client.ProviderConfig{
 		Provider: "ragflow",
 		APIKey:   "ragflow-TOKEN",
-		BaseURL:  "http://ragflow.example.com",
-		ExtraBody: map[string]any{
-			"chat_id": "your-chat-assistant-id",
-		},
+		BaseURL:  "http://ragflow.example.com/api/v1/chats_openai/your-chat-assistant-id/chat/completions",
 	})
 	if err != nil {
 		log.Fatalf("Error: %v", err)

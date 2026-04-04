@@ -164,16 +164,11 @@ func (s *Session) Chat(ctx context.Context, req base.ChatRequest) (base.ChatResp
 // chatRemoteSession handles remote_session mode for Chat.
 // No local history is loaded. session_id is injected only when s.id != "".
 func (s *Session) chatRemoteSession(ctx context.Context, req base.ChatRequest, startNewChat bool) (base.ChatResponse, error) {
-	// For remote_session, auto-generate session ID on first turn.
-	if s.id == "" {
-		s.mu.Lock()
-		if s.id == "" {
-			s.id = strings.ReplaceAll(uuid.New().String(), "-", "")
-		}
-		s.mu.Unlock()
-	}
-
 	if !startNewChat {
+		// Inject session ID only if we already have one (from a previous server response).
+		// Do NOT auto-generate a local UUID: some providers (e.g. qianfan_app) reject
+		// unknown conversation_ids. The server assigns one on the first turn, and the
+		// SDK persists it from the response for subsequent turns.
 		req.SessionID = s.id
 	}
 
@@ -506,17 +501,11 @@ func (s *Session) ChatStream(ctx context.Context, req base.ChatRequest) (<-chan 
 }
 
 func (s *Session) chatStreamRemoteSession(ctx context.Context, req base.ChatRequest, startNewChat bool) (<-chan streaming.StreamChunk, error) {
-	// For remote_session, auto-generate session ID on first turn.
-	// Some APIs (e.g., Qianwen) require session_id on every request.
-	if s.id == "" {
-		s.mu.Lock()
-		if s.id == "" {
-			s.id = strings.ReplaceAll(uuid.New().String(), "-", "")
-		}
-		s.mu.Unlock()
-	}
-
 	if !startNewChat {
+		// Inject session ID only if we already have one (from a previous server response).
+		// Do NOT auto-generate a local UUID: some providers (e.g. qianfan_app) reject
+		// unknown conversation_ids. The server assigns one on the first turn, and the
+		// SDK persists it from the response for subsequent turns.
 		req.SessionID = s.id
 	}
 

@@ -22,7 +22,7 @@ func ResolveConversationMode(provider string) ConversationMode {
 	case "openai", "claude", "gemini", "ollama",
 		"deepseek", "moonshot", "dashscope", "volcengine", "qianfan", "openai_compat", "bailian_app":
 		return ConversationModeLocalHistory
-	case "dify", "ragflow":
+	case "dify", "ragflow", "qianfan_app":
 		return ConversationModeRemoteSession
 	default: // fastgpt, generic, plugin, etc.
 		return ""

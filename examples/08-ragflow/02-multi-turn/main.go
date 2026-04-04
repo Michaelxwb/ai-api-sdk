@@ -21,10 +21,7 @@ func main() {
 	qs, err := cli.Quick(client.ProviderConfig{
 		Provider: "ragflow",
 		APIKey:   "ragflow-TOKEN",
-		BaseURL:  "http://ragflow.example.com",
-		ExtraBody: map[string]any{
-			"chat_id": "your-chat-assistant-id",
-		},
+		BaseURL:  "http://ragflow.example.com/api/v1/chats_openai/your-chat-assistant-id/chat/completions",
 	})
 	if err != nil {
 		log.Fatalf("Error: %v", err)

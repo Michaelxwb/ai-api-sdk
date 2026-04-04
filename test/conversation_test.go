@@ -140,6 +140,12 @@ func TestResolveConversationAndStreamDefaults(t *testing.T) {
 	if got := client.ResolveDefaultStream("openai"); !got {
 		t.Errorf("expected default stream=true for openai")
 	}
+	if got := client.ResolveConversationMode("qianfan_app"); got != client.ConversationModeRemoteSession {
+		t.Errorf("unexpected conversation mode for qianfan_app: %q", got)
+	}
+	if got := client.ResolveDefaultStream("qianfan_app"); !got {
+		t.Errorf("expected default stream=true for qianfan_app")
+	}
 }
 
 // Test OnErrorStrategy constants

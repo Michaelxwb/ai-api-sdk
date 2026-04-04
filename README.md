@@ -93,8 +93,9 @@ for chunk := range ch { fmt.Print(chunk.Text) }
 | Provider | 说明 | 必填参数 | 可选参数 | 默认 BaseURL | SessionMode |
 |----------|------|---------|---------|-------------|-------------|
 | `bailian_app` | 阿里百炼应用接入（Responses API） | `APIKey`, `BaseURL` | `Model`, `ExtraBody`, `Path` | 无（需填写应用 Endpoint） | 自动 `local_history` |
+| `qianfan_app` | 百度千帆应用接入 | `APIKey`, `Model`(app_id) | `BaseURL`, `ExtraBody`(`end_user_id`, `file_ids`等) | `qianfan.baidubce.com/v2/app/conversation/runs` | 自动 `remote_session` |
 | `dify` | Dify 平台 | `APIKey`, `BaseURL` | `Model`, `ExtraBody` | `api.dify.ai/v1` | 自动 `remote_session` |
-| `ragflow` | RAGFlow | `APIKey`, `BaseURL`, `ExtraBody`(必含 `chat_id`) | — | 无 | 自动 `remote_session` |
+| `ragflow` | RAGFlow | `APIKey`, `BaseURL`(完整 endpoint，含 `chat_id`) | `ExtraBody` | 无 | 自动 `remote_session` |
 | `fastgpt` | FastGPT | `APIKey`, `BaseURL`, `SessionMode` | `ExtraBody` | 无 | 需显式指定 |
 
 ### 通用适配
@@ -106,9 +107,9 @@ for chunk := range ch { fmt.Print(chunk.Text) }
 **说明**：
 - `BaseURL` 有默认值的 Provider 不传则直连官方 API，传入则切换到自建/代理地址
 - `SessionMode`：`local_history` = SDK 管理历史；`remote_session` = 服务端管理会话。标注"自动"的无需手动指定
-- `bailian_app`/`dify`/`ragflow`/`fastgpt` 的 `Model` 在平台侧配置，SDK 端可不传
+- `bailian_app`/`dify`/`ragflow`/`fastgpt` 的 `Model` 在平台侧配置，SDK 端可不传；`qianfan_app` 的 `Model` 填 app_id
 - `generic` 的 `Model` 语义由 `Request` 模板决定，不单独传
-- `ragflow` 需通过 `ExtraBody` 传入 `chat_id`；`fastgpt` 可通过 `ExtraBody` 传入 `detail`、`variables`
+- `ragflow` 需在 `BaseURL` 中直接填写完整 endpoint（`/api/v1/chats_openai/{chat_id}/chat/completions`）；`fastgpt` 可通过 `ExtraBody` 传入 `detail`、`variables`
 
 **通用可选参数**（所有 Provider 均支持）：`Stream`、`TimeoutSec`、`OnError`、`HistoryMaxMessages`、`HistoryMaxTokens`、`StartNewChat`、`AuthHeaders`、`QueryParams`
 

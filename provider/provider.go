@@ -10,5 +10,6 @@ import (
 	_ "github.com/Michaelxwb/ai-api-sdk/provider/impls/ollama"
 	_ "github.com/Michaelxwb/ai-api-sdk/provider/impls/openai"
 	_ "github.com/Michaelxwb/ai-api-sdk/provider/impls/plugin"
+	_ "github.com/Michaelxwb/ai-api-sdk/provider/impls/qianfan_app"
 	_ "github.com/Michaelxwb/ai-api-sdk/provider/impls/ragflow"
 )

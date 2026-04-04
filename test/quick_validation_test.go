@@ -109,6 +109,19 @@ func TestQuickValidation(t *testing.T) {
 		}
 	})
 
+	t.Run("qianfan_app has default BaseURL and SessionMode", func(t *testing.T) {
+		qs, err := cli.Quick(client.ProviderConfig{
+			Provider: "qianfan_app",
+			APIKey:   "token",
+		})
+		if err != nil {
+			t.Fatalf("unexpected validation error for qianfan_app: %v", err)
+		}
+		if qs == nil {
+			t.Fatal("expected non-nil QuickSession")
+		}
+	})
+
 	t.Run("bailian_app requires BaseURL but not SessionMode", func(t *testing.T) {
 		_, err := cli.Quick(client.ProviderConfig{
 			Provider: "bailian_app",

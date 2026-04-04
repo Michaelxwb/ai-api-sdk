@@ -19,9 +19,9 @@ import (
 // 响应嵌套在 code/data 结构中，流式终止帧为 data:true。
 // 这些结构性差异使其不适合 Generic Adapter，需专用 Provider。
 //
-// chat_id 说明：
-//   - 必须通过 ExtraBody["chat_id"] 传入
-//   - 用于 URL 路径拼接：/api/v1/chats/{chat_id}/completions
+// endpoint 说明：
+//   - 必须通过 BaseURL 直接传完整 URL
+//   - 例如：/api/v1/chats_openai/{chat_id}/chat/completions
 //
 // session_id 说明：
 //   - 首轮对话不传，由 RAGFlow 自动生成
@@ -41,20 +41,18 @@ func (s *RAGFlowSpec) SupportedAuthTypes() []auth.AuthType {
 }
 
 func (s *RAGFlowSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req base.ChatRequest) (*http.Request, error) {
-	// chat_id 从 ExtraBody 提取，用于 URL 路径拼接。
-	chatID := ""
-	if v, ok := opts.ExtraBody["chat_id"]; ok {
-		if s, ok := v.(string); ok {
-			chatID = strings.TrimSpace(s)
-		}
+	endpoint := strings.TrimSpace(opts.BaseURL)
+	if endpoint == "" {
+		endpoint = s.DefaultBaseURL()
 	}
-	if chatID == "" {
-		return nil, fmt.Errorf("ragflow: chat_id is required in ExtraBody")
+	if endpoint == "" {
+		return nil, fmt.Errorf("ragflow: full endpoint BaseURL is required")
 	}
-
-	baseURL := strings.TrimSpace(opts.BaseURL)
-	if baseURL == "" {
-		baseURL = s.DefaultBaseURL()
+	if strings.TrimSpace(opts.Path) != "" {
+		return nil, fmt.Errorf("ragflow: Path override is not supported, put full endpoint in BaseURL")
+	}
+	if _, ok := opts.ExtraBody["chat_id"]; ok {
+		return nil, fmt.Errorf("ragflow: chat_id in ExtraBody is not supported, include it in BaseURL endpoint")
 	}
 
 	// 从 Messages 提取最后一条 user 消息作为 question。
@@ -78,11 +76,8 @@ func (s *RAGFlowSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, 
 		payload["session_id"] = req.SessionID
 	}
 
-	// 合并 ExtraBody 中的额外字段（chat_id 已提取，不传入请求体）。
+	// 合并 ExtraBody 中的额外字段。
 	for k, v := range opts.ExtraBody {
-		if k == "chat_id" {
-			continue
-		}
 		payload[k] = v
 	}
 
@@ -91,13 +86,7 @@ func (s *RAGFlowSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, 
 		return nil, fmt.Errorf("ragflow: serialize request body failed: %w", err)
 	}
 
-	path := fmt.Sprintf("/api/v1/chats/%s/completions", chatID)
-	if strings.TrimSpace(opts.Path) != "" {
-		path = opts.Path
-	}
-	url := strings.TrimRight(baseURL, "/") + path
-
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
+	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
 	if err != nil {
 		return nil, fmt.Errorf("ragflow: request creation failed: %w", err)
 	}
