@@ -21,9 +21,9 @@ func main() {
 	// Model 填 bot_id，从 Coze 平台获取
 	qs, err := cli.Quick(client.ProviderConfig{
 		Provider: "coze",
-		APIKey:   "pat_QpNhYwzQ7XXHsGDc6eJiSI0NnNtjXQ7YXFW8SJBymufh7bqlOcSVvrhSy9ITw1RR", // Coze 个人访问令牌
-		Model:    "7607749137564057650",                                                  // Coze Bot ID
-		BaseURL:  "https://api.coze.cn/v3",                                               // 国际站；默认国内站 api.coze.cn
+		APIKey:   "pat-TOKEN",              // Coze 个人访问令牌
+		Model:    "7607749137564057650",    // Coze Bot ID
+		BaseURL:  "https://api.coze.cn/v3", // 国际站；默认国内站 api.coze.cn
 		// ExtraBody: map[string]any{
 		//     "user_id": "my-user",            // 默认 "sdk-user"
 		// },
