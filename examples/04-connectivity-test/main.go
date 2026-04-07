@@ -18,9 +18,9 @@ func main() {
 
 	qs, err := cli.Quick(client.ProviderConfig{
 		Provider: "openai_compat",
-		APIKey:   "sk-TOKEN",
-		BaseURL:  "http://10.6.193.48:30090/v1",
-		Model:    "Qwen3-32B-FP8",
+		APIKey:   "sk-cIyNbNBekxy2qUSCffEPiZxbljNezGBYpQ8b7qO2aj6NW4NV",
+		BaseURL:  "https://api.5090523.xyz/v1",
+		Model:    "gpt-5.3-codex",
 	})
 	if err != nil {
 		log.Fatalf("Error: %v", err)

@@ -1105,3 +1105,126 @@ func parseSimpleJSONResponse(resp *http.Response) (base.ChatResponse, error) {
 	}
 	return base.ChatResponse{Text: payload.Text, SessionID: payload.SessionID, Raw: data}, nil
 }
+
+// TestConnectivityProbe_NoStoreWrite verifies the probe session does not write to a SessionStore.
+func TestConnectivityProbe_NoStoreWrite(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, _ := w.(http.Flusher)
+		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n")
+		if flusher != nil {
+			flusher.Flush()
+		}
+		_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}))
+	defer srv.Close()
+
+	store := &mockStore{}
+	cli := client.New()
+	qs, err := cli.Quick(client.ProviderConfig{
+		Provider: "openai",
+		APIKey:   "sk-test",
+		BaseURL:  srv.URL,
+		Model:    "gpt-test",
+		Store:    store,
+	})
+	if err != nil {
+		t.Fatalf("Quick error: %v", err)
+	}
+
+	_, err = qs.Test(context.Background())
+	if err != nil {
+		t.Fatalf("Test error: %v", err)
+	}
+
+	_, saveCount := store.Counts()
+	if saveCount != 0 {
+		t.Fatalf("probe should not write to store, but saveCount = %d", saveCount)
+	}
+}
+
+// TestClientTestWith_BackwardCompat verifies Client.TestWith still works with the refactored implementation.
+func TestClientTestWith_BackwardCompat(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload map[string]any
+		if err := json.NewDecoder(r.Body).Decode(&payload); err != nil {
+			t.Fatalf("decode request body: %v", err)
+		}
+		// Verify default prompt is "return 1"
+		msgs, _ := payload["messages"].([]any)
+		if len(msgs) == 0 {
+			t.Fatal("expected messages in payload")
+		}
+		m, _ := msgs[0].(map[string]any)
+		content, _ := m["content"].(string)
+		if content != "return 1" {
+			t.Fatalf("default prompt = %q, want %q", content, "return 1")
+		}
+
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, _ := w.(http.Flusher)
+		_, _ = fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"1\"}}]}\n\n")
+		if flusher != nil {
+			flusher.Flush()
+		}
+		_, _ = fmt.Fprint(w, "data: [DONE]\n\n")
+		if flusher != nil {
+			flusher.Flush()
+		}
+	}))
+	defer srv.Close()
+
+	cli := client.New()
+	cred := auth.NewCredential("openai", "sk-test")
+	pc := &config.ProviderConfig{
+		Name:    "openai",
+		Type:    "openai",
+		BaseURL: srv.URL,
+	}
+	result, err := cli.TestWith(context.Background(), cred, pc, &client.TestOptions{Model: "gpt-test"})
+	if err != nil {
+		t.Fatalf("TestWith error: %v", err)
+	}
+	if result.Response.Text != "1" {
+		t.Fatalf("response text = %q, want %q", result.Response.Text, "1")
+	}
+	if result.Latency <= 0 {
+		t.Fatal("latency should be > 0")
+	}
+}
+
+// TestConnectivityProbe_Timeout verifies context timeout cancels the probe.
+func TestConnectivityProbe_Timeout(t *testing.T) {
+	t.Run("ctx_deadline_takes_priority", func(t *testing.T) {
+		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Delay longer than client timeout; bail on server shutdown.
+			select {
+			case <-time.After(2 * time.Second):
+			case <-r.Context().Done():
+			}
+		}))
+		defer srv.Close()
+
+		cli := client.New()
+		ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+		defer cancel()
+
+		qs, err := cli.Quick(client.ProviderConfig{
+			Provider: "openai",
+			APIKey:   "sk-test",
+			BaseURL:  srv.URL,
+			Model:    "gpt-test",
+		})
+		if err != nil {
+			t.Fatalf("Quick error: %v", err)
+		}
+
+		_, err = qs.Test(ctx)
+		if err == nil {
+			t.Fatal("expected timeout error, got nil")
+		}
+	})
+}

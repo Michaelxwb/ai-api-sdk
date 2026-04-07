@@ -16,7 +16,7 @@ const defaultTestTimeout = 10 * time.Second
 type TestOptions struct {
 	Model   string        // 必填：要测试的模型名称
 	Timeout time.Duration // 可选：超时时间，默认 10s
-	Prompt  string        // 可选：测试 prompt，默认 "1"
+	Prompt  string        // 可选：测试 prompt，默认 "return 1"
 }
 
 // TestResult 连通性测试结果
@@ -25,9 +25,10 @@ type TestResult struct {
 	Response base.ChatResponse // 原始响应
 }
 
-// TestWith 平台集成模式的连通性测试
-// 通过发送最小化流式请求验证全链路：网络可达 → 凭证有效 → 模型可用
-// 使用流式模式确保兼容所有 Provider（包括仅支持流式的 Coze 等）
+// TestWith 平台集成模式的连通性测试。
+// 构造临时无状态探测 QuickSession，通过 Send() 复用主链路验证全链路：
+// 网络可达 → 凭证有效 → 模型可用。
+// 使用流式模式确保兼容所有 Provider（包括仅支持流式的 Coze 等）。
 func (c *Client) TestWith(ctx context.Context, cred *auth.Credential, pc *config.ProviderConfig, opt *TestOptions) (TestResult, error) {
 	optVal, err := normalizeTestOptions(opt)
 	if err != nil {
@@ -38,13 +39,52 @@ func (c *Client) TestWith(ctx context.Context, cred *auth.Credential, pc *config
 		defer cancel()
 	}
 
-	return c.testStream(ctx, optVal, func(req base.ChatRequest) (*Session, error) {
-		sess := c.NewSessionWith(cred, pc, WithStore(nil), WithHistoryMode(HistoryNone))
-		return sess, nil
-	})
+	// 构造临时探测 QuickSession：无状态、流式、独立会话
+	sess := c.NewSessionWith(cred, pc,
+		WithStore(nil),
+		WithHistoryMode(HistoryNone),
+		WithStartNewChat(true),
+		WithTimeout(optVal.Timeout),
+	)
+	probeQS := &QuickSession{
+		session: sess,
+		cred:    cred,
+		pc:      pc,
+		model:   optVal.Model,
+		stream:  true,
+	}
+
+	// 通过 Send() 复用主链路
+	msgs := []base.Message{{Role: "user", Content: optVal.Prompt}}
+	start := time.Now()
+	ch, err := probeQS.Send(ctx, msgs)
+	if err != nil {
+		return TestResult{Latency: time.Since(start)}, err
+	}
+
+	var text string
+	var usage *base.Usage
+	for chunk := range ch {
+		if chunk.Error != nil {
+			return TestResult{Latency: time.Since(start)}, chunk.Error
+		}
+		text += chunk.Text
+		if chunk.Usage != nil {
+			usage = chunk.Usage
+		}
+	}
+
+	return TestResult{
+		Latency: time.Since(start),
+		Response: base.ChatResponse{
+			Text:  text,
+			Usage: usage,
+		},
+	}, nil
 }
 
-// Test 本地配置模式的连通性测试
+// Test 本地配置模式的连通性测试。
+// 从已注册的 provider 配置构建凭证后委托 TestWith。
 func (c *Client) Test(ctx context.Context, providerName string, opt *TestOptions) (TestResult, error) {
 	optVal, err := normalizeTestOptions(opt)
 	if err != nil {
@@ -55,28 +95,22 @@ func (c *Client) Test(ctx context.Context, providerName string, opt *TestOptions
 		defer cancel()
 	}
 
-	return c.testStream(ctx, optVal, func(req base.ChatRequest) (*Session, error) {
-		sess := c.NewSession(providerName, WithStore(nil), WithHistoryMode(HistoryNone))
-		return sess, nil
-	})
-}
-
-// testStream 统一的流式连通性测试实现。
-// 使用流式模式兼容所有 Provider（部分 Provider 如 Coze 仅支持流式）。
-func (c *Client) testStream(ctx context.Context, opt TestOptions, makeSession func(base.ChatRequest) (*Session, error)) (TestResult, error) {
-	req := base.ChatRequest{
-		Model:    opt.Model,
-		Messages: []base.Message{{Role: "user", Content: opt.Prompt}},
-		Stream:   true,
+	// 构造临时探测 QuickSession：无状态、流式、独立会话
+	sess := c.NewSession(providerName,
+		WithStore(nil),
+		WithHistoryMode(HistoryNone),
+		WithStartNewChat(true),
+		WithTimeout(optVal.Timeout),
+	)
+	probeQS := &QuickSession{
+		session: sess,
+		model:   optVal.Model,
+		stream:  true,
 	}
 
-	sess, err := makeSession(req)
-	if err != nil {
-		return TestResult{}, err
-	}
-
+	msgs := []base.Message{{Role: "user", Content: optVal.Prompt}}
 	start := time.Now()
-	ch, err := sess.ChatStream(ctx, req)
+	ch, err := probeQS.Send(ctx, msgs)
 	if err != nil {
 		return TestResult{Latency: time.Since(start)}, err
 	}
@@ -115,7 +149,7 @@ func normalizeTestOptions(opt *TestOptions) (TestOptions, error) {
 		out.Timeout = defaultTestTimeout
 	}
 	if out.Prompt == "" {
-		out.Prompt = "1"
+		out.Prompt = "return 1"
 	}
 	return out, nil
 }

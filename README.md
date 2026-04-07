@@ -117,6 +117,8 @@ for chunk := range ch { fmt.Print(chunk.Text) }
 
 **通用可选参数**（所有 Provider 均支持）：`Stream`、`TimeoutSec`、`OnError`、`HistoryMaxMessages`、`HistoryMaxTokens`、`StartNewChat`、`AuthHeaders`、`QueryParams`
 
+**连通性测试**：所有 Provider 均支持 `qs.Test(ctx)`，内部复用 `Send()` 主链路（流式模式），默认探测 prompt 为 `"return 1"`。探测会话无状态，不污染业务会话、不写入 Store。
+
 ## 配置选项
 
 ### 基础配置

@@ -274,12 +274,13 @@ qs, _ := client.New().Quick(client.ProviderConfig{
 
 ## 场景 7：连通性测试
 
-测试配置是否正确：
+测试配置是否正确。`Test()` 内部复用 `Send()` 主链路（流式模式），发送最小化探测消息 `"return 1"` 验证全链路可用性。探测会话无状态，不污染业务会话、不写入 Store，所有 Provider（包括仅支持流式的 Coze）均兼容。
 
 ```go
-qs := client.New().Quick(client.ProviderConfig{
+qs, _ := client.New().Quick(client.ProviderConfig{
     Provider: "openai",
     APIKey:   "sk-xxx",
+    Model:    "gpt-4",
 })
 
 result, err := qs.Test(ctx)
@@ -287,6 +288,7 @@ if err != nil {
     log.Fatalf("连接失败: %v", err)
 }
 fmt.Printf("延迟: %v\n", result.Latency)
+fmt.Printf("响应: %s\n", result.Response.Text)
 ```
 
 ## 特定平台示例
