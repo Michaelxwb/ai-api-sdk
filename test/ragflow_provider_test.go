@@ -15,8 +15,9 @@ import (
 func TestRAGFlowSpec_BuildRequest(t *testing.T) {
 	spec := mustGetSpec(t, "ragflow")
 
-	t.Run("normal_with_full_endpoint_base_url", func(t *testing.T) {
+	t.Run("openai_compat_endpoint", func(t *testing.T) {
 		req := base.ChatRequest{
+			Model:     "test-model",
 			Messages:  []base.Message{{Role: "user", Content: "what is RAGFlow?"}},
 			Stream:    true,
 			SessionID: "sess-1",
@@ -37,6 +38,37 @@ func TestRAGFlowSpec_BuildRequest(t *testing.T) {
 		}
 
 		payload := decodeBodyMap(t, httpReq)
+		if payload["model"] != "test-model" {
+			t.Fatalf("expected model in OpenAI compat payload, got: %v", payload["model"])
+		}
+		msgs, ok := payload["messages"].([]any)
+		if !ok || len(msgs) != 1 {
+			t.Fatalf("expected messages array with 1 element, got: %v", payload["messages"])
+		}
+		if payload["stream"] != true {
+			t.Fatalf("unexpected stream: %v", payload["stream"])
+		}
+		if _, ok := payload["question"]; ok {
+			t.Fatalf("OpenAI compat endpoint should not have question field")
+		}
+	})
+
+	t.Run("native_endpoint", func(t *testing.T) {
+		req := base.ChatRequest{
+			Messages:  []base.Message{{Role: "user", Content: "what is RAGFlow?"}},
+			Stream:    true,
+			SessionID: "sess-1",
+		}
+		opts := base.BuildOptions{
+			BaseURL: "https://ragflow.example.com/api/v1/chats/chat-abc/completions",
+		}
+
+		httpReq, err := spec.BuildRequest(context.Background(), opts, req)
+		if err != nil {
+			t.Fatalf("BuildRequest error: %v", err)
+		}
+
+		payload := decodeBodyMap(t, httpReq)
 		if payload["question"] != "what is RAGFlow?" {
 			t.Fatalf("unexpected question: %v", payload["question"])
 		}
@@ -46,8 +78,8 @@ func TestRAGFlowSpec_BuildRequest(t *testing.T) {
 		if payload["session_id"] != "sess-1" {
 			t.Fatalf("unexpected session_id: %v", payload["session_id"])
 		}
-		if _, ok := payload["chat_id"]; ok {
-			t.Fatalf("chat_id should not be in request body")
+		if _, ok := payload["model"]; ok {
+			t.Fatalf("native endpoint should not have model field")
 		}
 	})
 
@@ -122,8 +154,31 @@ func TestRAGFlowSpec_BuildRequest(t *testing.T) {
 		}
 	})
 
-	t.Run("question_from_last_user_message", func(t *testing.T) {
+	t.Run("native_question_from_last_user_message", func(t *testing.T) {
 		req := base.ChatRequest{
+			Messages: []base.Message{
+				{Role: "user", Content: "first"},
+				{Role: "assistant", Content: "reply"},
+				{Role: "user", Content: "second"},
+			},
+		}
+		opts := base.BuildOptions{
+			BaseURL: "https://ragflow.example.com/api/v1/chats/chat-1/completions",
+		}
+
+		httpReq, err := spec.BuildRequest(context.Background(), opts, req)
+		if err != nil {
+			t.Fatalf("BuildRequest error: %v", err)
+		}
+		payload := decodeBodyMap(t, httpReq)
+		if payload["question"] != "second" {
+			t.Fatalf("expected question from last user message, got: %v", payload["question"])
+		}
+	})
+
+	t.Run("openai_compat_messages_passthrough", func(t *testing.T) {
+		req := base.ChatRequest{
+			Model: "test",
 			Messages: []base.Message{
 				{Role: "user", Content: "first"},
 				{Role: "assistant", Content: "reply"},
@@ -139,17 +194,21 @@ func TestRAGFlowSpec_BuildRequest(t *testing.T) {
 			t.Fatalf("BuildRequest error: %v", err)
 		}
 		payload := decodeBodyMap(t, httpReq)
-		if payload["question"] != "second" {
-			t.Fatalf("expected question from last user message, got: %v", payload["question"])
+		msgs, ok := payload["messages"].([]any)
+		if !ok || len(msgs) != 3 {
+			t.Fatalf("expected 3 messages in OpenAI compat, got: %v", payload["messages"])
+		}
+		if _, ok := payload["question"]; ok {
+			t.Fatalf("OpenAI compat should not have question field")
 		}
 	})
 
-	t.Run("empty_messages", func(t *testing.T) {
+	t.Run("native_empty_messages", func(t *testing.T) {
 		req := base.ChatRequest{
 			Messages: []base.Message{},
 		}
 		opts := base.BuildOptions{
-			BaseURL: "https://ragflow.example.com/api/v1/chats_openai/chat-1/chat/completions",
+			BaseURL: "https://ragflow.example.com/api/v1/chats/chat-1/completions",
 		}
 
 		httpReq, err := spec.BuildRequest(context.Background(), opts, req)

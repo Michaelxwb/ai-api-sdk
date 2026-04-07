@@ -15,18 +15,25 @@ import (
 
 // RAGFlowSpec 实现 RAGFlow Chat Completions API。
 //
-// RAGFlow 使用 question 字段（非 messages）发送用户问题，
-// 响应嵌套在 code/data 结构中，流式终止帧为 data:true。
-// 这些结构性差异使其不适合 Generic Adapter，需专用 Provider。
+// RAGFlow 提供两种端点：
+//   - 原生端点: /api/v1/chats/{chat_id}/completions — 使用 question 字段
+//   - OpenAI 兼容端点: /api/v1/chats_openai/{chat_id}/chat/completions — 使用 model + messages
+//
+// SDK 通过 BaseURL 是否包含 "chats_openai" 自动检测端点类型并切换请求/响应格式。
 //
 // endpoint 说明：
 //   - 必须通过 BaseURL 直接传完整 URL
 //   - 例如：/api/v1/chats_openai/{chat_id}/chat/completions
 //
-// session_id 说明：
+// session_id 说明（仅原生端点）：
 //   - 首轮对话不传，由 RAGFlow 自动生成
 //   - 续轮通过 ChatRequest.SessionID 注入
 type RAGFlowSpec struct{}
+
+// isOpenAICompat returns true if the URL targets RAGFlow's OpenAI-compatible endpoint.
+func isOpenAICompat(url string) bool {
+	return strings.Contains(url, "chats_openai")
+}
 
 func init() {
 	base.Register("ragflow", &RAGFlowSpec{})
@@ -55,25 +62,40 @@ func (s *RAGFlowSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, 
 		return nil, fmt.Errorf("ragflow: chat_id in ExtraBody is not supported, include it in BaseURL endpoint")
 	}
 
-	// 从 Messages 提取最后一条 user 消息作为 question。
-	question := ""
-	for i := len(req.Messages) - 1; i >= 0; i-- {
-		if strings.EqualFold(req.Messages[i].Role, "user") {
-			question = req.Messages[i].Content
-			break
+	var payload map[string]any
+
+	if isOpenAICompat(endpoint) {
+		// OpenAI 兼容端点：发送 model + messages 格式。
+		payload = map[string]any{
+			"model":    req.Model,
+			"messages": req.Messages,
+			"stream":   req.Stream,
 		}
-	}
-	if question == "" && len(req.Messages) > 0 {
-		question = req.Messages[len(req.Messages)-1].Content
-	}
-
-	payload := map[string]any{
-		"question": question,
-		"stream":   req.Stream,
-	}
-
-	if req.SessionID != "" {
-		payload["session_id"] = req.SessionID
+		if req.Temperature != nil {
+			payload["temperature"] = *req.Temperature
+		}
+		if req.MaxTokens != nil {
+			payload["max_tokens"] = *req.MaxTokens
+		}
+	} else {
+		// 原生端点：发送 question 格式。
+		question := ""
+		for i := len(req.Messages) - 1; i >= 0; i-- {
+			if strings.EqualFold(req.Messages[i].Role, "user") {
+				question = req.Messages[i].Content
+				break
+			}
+		}
+		if question == "" && len(req.Messages) > 0 {
+			question = req.Messages[len(req.Messages)-1].Content
+		}
+		payload = map[string]any{
+			"question": question,
+			"stream":   req.Stream,
+		}
+		if req.SessionID != "" {
+			payload["session_id"] = req.SessionID
+		}
 	}
 
 	// 合并 ExtraBody 中的额外字段。
@@ -106,6 +128,11 @@ func (s *RAGFlowSpec) ParseResponse(resp *http.Response) (base.ChatResponse, err
 		return base.ChatResponse{}, fmt.Errorf("ragflow: read response failed: %w", err)
 	}
 
+	// OpenAI 兼容端点返回 choices[].message.content 格式。
+	if resp.Request != nil && isOpenAICompat(resp.Request.URL.String()) {
+		return s.parseOpenAIResponse(data)
+	}
+
 	var result struct {
 		Code    int    `json:"code"`
 		Message string `json:"message"`
@@ -130,6 +157,30 @@ func (s *RAGFlowSpec) ParseResponse(resp *http.Response) (base.ChatResponse, err
 		SessionID: result.Data.SessionID,
 		Raw:       data,
 	}, nil
+}
+
+func (s *RAGFlowSpec) parseOpenAIResponse(data []byte) (base.ChatResponse, error) {
+	var parsed struct {
+		Choices []struct {
+			Message struct {
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+		Error *struct {
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(data, &parsed); err != nil {
+		return base.ChatResponse{}, fmt.Errorf("ragflow: response parsing failed: %w", err)
+	}
+	if parsed.Error != nil && parsed.Error.Message != "" {
+		return base.ChatResponse{}, fmt.Errorf("ragflow: server error: %s", parsed.Error.Message)
+	}
+	text := ""
+	if len(parsed.Choices) > 0 {
+		text = parsed.Choices[0].Message.Content
+	}
+	return base.ChatResponse{Text: text, Raw: data}, nil
 }
 
 func (s *RAGFlowSpec) AuthStrategyOverride(cred *auth.Credential) (auth.AuthStrategy, bool) {

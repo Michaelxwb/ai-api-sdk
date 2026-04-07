@@ -96,7 +96,7 @@ for chunk := range ch { fmt.Print(chunk.Text) }
 | `coze` | Coze 扣子（仅流式） | `APIKey`, `Model`(bot_id) | `BaseURL`, `ExtraBody`(`user_id`, `custom_variables`等) | `api.coze.cn/v3` | 自动 `remote_session` |
 | `qianfan_app` | 百度千帆应用接入 | `APIKey`, `Model`(app_id) | `BaseURL`, `ExtraBody`(`end_user_id`, `file_ids`等) | `qianfan.baidubce.com/v2/app/conversation/runs` | 自动 `remote_session` |
 | `dify` | Dify 平台 | `APIKey`, `BaseURL` | `Model`, `ExtraBody` | `api.dify.ai/v1` | 自动 `remote_session` |
-| `ragflow` | RAGFlow | `APIKey`, `BaseURL`(完整 endpoint，含 `chat_id`) | `ExtraBody` | 无 | 自动 `remote_session` |
+| `ragflow` | RAGFlow（自动适配原生/OpenAI 兼容端点） | `APIKey`, `BaseURL`(完整 endpoint，含 `chat_id`) | `Model`, `ExtraBody` | 无 | 自动 `remote_session` |
 | `fastgpt` | FastGPT | `APIKey`, `BaseURL`, `SessionMode` | `ExtraBody` | 无 | 需显式指定 |
 
 ### 通用适配
@@ -110,7 +110,10 @@ for chunk := range ch { fmt.Print(chunk.Text) }
 - `SessionMode`：`local_history` = SDK 管理历史；`remote_session` = 服务端管理会话。标注"自动"的无需手动指定
 - `bailian_app`/`dify`/`ragflow`/`fastgpt` 的 `Model` 在平台侧配置，SDK 端可不传；`qianfan_app` 的 `Model` 填 app_id；`coze` 的 `Model` 填 bot_id
 - `generic` 的 `Model` 语义由 `Request` 模板决定，不单独传
-- `ragflow` 需在 `BaseURL` 中直接填写完整 endpoint（`/api/v1/chats_openai/{chat_id}/chat/completions`）；`fastgpt` 可通过 `ExtraBody` 传入 `detail`、`variables`
+- `ragflow` 需在 `BaseURL` 中直接填写完整 endpoint，支持两种端点格式（SDK 自动识别）：
+  - OpenAI 兼容端点：`/api/v1/chats_openai/{chat_id}/chat/completions`（推荐，需传 `Model`）
+  - 原生端点：`/api/v1/chats/{chat_id}/completions`（使用 `question` 字段，支持 `session_id`）
+- `fastgpt` 可通过 `ExtraBody` 传入 `detail`、`variables`
 
 **通用可选参数**（所有 Provider 均支持）：`Stream`、`TimeoutSec`、`OnError`、`HistoryMaxMessages`、`HistoryMaxTokens`、`StartNewChat`、`AuthHeaders`、`QueryParams`
 
@@ -209,7 +212,7 @@ qs, _ := cli.Quick(client.ProviderConfig{
 | 11 | 阿里百炼应用 | `bailian_app` | `https://dashscope.aliyuncs.com/api/v2/apps/agent/{APP_ID}/compatible-mode/v1` | Model 可选，平台侧配置 |
 | 12 | 百度千帆应用 | `qianfan_app` | `https://qianfan.baidubce.com/v2/app/conversation/runs` | Model 填 app_id |
 | 13 | Dify | `dify` | `https://api.dify.ai/v1` | Model 在平台侧配置 |
-| 14 | RAGFlow | `ragflow` | `http://{HOST}/api/v1/chats_openai/{CHAT_ID}/chat/completions` | Model 在平台侧配置 |
+| 14 | RAGFlow | `ragflow` | `http://{HOST}/api/v1/chats_openai/{CHAT_ID}/chat/completions` 或 `http://{HOST}/api/v1/chats/{CHAT_ID}/completions` | 自动识别端点格式；OpenAI 兼容端点需传 Model |
 | 15 | FastGPT | `fastgpt` | `https://api.fastgpt.in/api/v1/chat/completions` | 需显式指定 SessionMode |
 
 ### 通用适配

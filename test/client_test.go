@@ -936,7 +936,17 @@ func TestBailianApp_QuickStoreAndTest(t *testing.T) {
 			if _, ok := payload["model"]; ok {
 				t.Fatalf("expected no model in test payload, got %v", payload["model"])
 			}
-			_, _ = io.WriteString(w, `{"output_text":"pong","usage":{"input_tokens":1,"output_tokens":1,"total_tokens":2}}`)
+			// Test() now uses streaming — return SSE format.
+			w.Header().Set("Content-Type", "text/event-stream")
+			flusher, _ := w.(http.Flusher)
+			_, _ = io.WriteString(w, "event: response.output_text.delta\ndata: {\"delta\":\"pong\"}\n\n")
+			if flusher != nil {
+				flusher.Flush()
+			}
+			_, _ = io.WriteString(w, "event: response.completed\ndata: {\"usage\":{\"input_tokens\":1,\"output_tokens\":1,\"total_tokens\":2}}\n\n")
+			if flusher != nil {
+				flusher.Flush()
+			}
 		}))
 		defer srv.Close()
 
@@ -975,7 +985,17 @@ func TestBailianApp_TestWith(t *testing.T) {
 		if _, ok := payload["model"]; ok {
 			t.Fatalf("expected no model for placeholder test model, got %v", payload["model"])
 		}
-		_, _ = io.WriteString(w, `{"output_text":"ok"}`)
+		// TestWith now uses streaming — return SSE format.
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher, _ := w.(http.Flusher)
+		_, _ = io.WriteString(w, "event: response.output_text.delta\ndata: {\"delta\":\"ok\"}\n\n")
+		if flusher != nil {
+			flusher.Flush()
+		}
+		_, _ = io.WriteString(w, "event: response.completed\ndata: {}\n\n")
+		if flusher != nil {
+			flusher.Flush()
+		}
 	}))
 	defer srv.Close()
 

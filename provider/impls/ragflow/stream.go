@@ -12,18 +12,33 @@ import (
 	"github.com/Michaelxwb/ai-api-sdk/provider/streaming"
 )
 
+// OpenAI 兼容端点的流式配置。
+var ragflowOpenAIStreamConfig = streaming.StreamConfig{
+	Protocol:   streaming.ProtocolSSE,
+	DeltaPaths: []string{"choices.0.delta.content"},
+	DoneMarker: "[DONE]",
+}
+
 // ParseStreamResponse 实现 ProviderStreamSpec 接口。
 //
-// RAGFlow 流式响应格式：
-//   - 数据帧: data:{"code":0,"data":{"answer":"增量文本","session_id":"xxx"}}
-//   - 终止帧: data:{"code":0,"data":true}
-//   - 错误帧: data:{"code":102,"message":"unauthorized"}
-//
-// 关键差异：终止帧的 data 字段从 object 变为 bool true，
-// 需要通过 json.RawMessage 延迟解析来检测类型。
+// 根据端点类型自动选择解析模式：
+//   - chats_openai 端点: OpenAI SSE 格式 (choices.0.delta.content + [DONE])
+//   - 原生端点: RAGFlow 私有格式 (code/data envelope + data:true 终止帧)
 func (s *RAGFlowSpec) ParseStreamResponse(resp *http.Response) (<-chan streaming.StreamChunk, error) {
 	if resp == nil {
 		return nil, fmt.Errorf("ragflow: response is nil")
+	}
+
+	// OpenAI 兼容端点使用标准 SSE 解析器。
+	if resp.Request != nil && isOpenAICompat(resp.Request.URL.String()) {
+		parser := &streaming.SSEParser{Config: ragflowOpenAIStreamConfig}
+		extractor := streaming.MakeJSONPathExtractor(
+			ragflowOpenAIStreamConfig.DeltaPaths[0],
+			ragflowOpenAIStreamConfig.DonePath,
+			ragflowOpenAIStreamConfig.DoneValue,
+			"",
+		)
+		return parser.Parse(streaming.StreamContext(resp), resp, extractor)
 	}
 
 	ctx := streaming.StreamContext(resp)
