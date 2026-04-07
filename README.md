@@ -1,11 +1,11 @@
 # AI API SDK
 
-> 统一 AI 模型接入 SDK，一行代码接入 15+ 主流 AI 平台
+> 统一 AI 模型接入 SDK，一行代码接入 16+ 主流 AI 平台
 
 ## 特性
 
 - 🚀 **极简接入** - Quick API 一行代码完成配置
-- 🌐 **15+ 平台** - OpenAI、Claude、Gemini、Dify、FastGPT、RAGFlow 等
+- 🌐 **16+ 平台** - OpenAI、Claude、Gemini、Coze、Dify、FastGPT、RAGFlow 等
 - 💬 **流式优先** - 原生流式支持，实时响应
 - 🔄 **会话管理** - 自动管理多轮对话历史
 - 🔐 **灵活认证** - API Key、Bearer Token、自定义 Header
@@ -93,6 +93,7 @@ for chunk := range ch { fmt.Print(chunk.Text) }
 | Provider | 说明 | 必填参数 | 可选参数 | 默认 BaseURL | SessionMode |
 |----------|------|---------|---------|-------------|-------------|
 | `bailian_app` | 阿里百炼应用接入（Responses API） | `APIKey`, `BaseURL` | `Model`, `ExtraBody`, `Path` | 无（需填写应用 Endpoint） | 自动 `local_history` |
+| `coze` | Coze 扣子（仅流式） | `APIKey`, `Model`(bot_id) | `BaseURL`, `ExtraBody`(`user_id`, `custom_variables`等) | `api.coze.cn/v3` | 自动 `remote_session` |
 | `qianfan_app` | 百度千帆应用接入 | `APIKey`, `Model`(app_id) | `BaseURL`, `ExtraBody`(`end_user_id`, `file_ids`等) | `qianfan.baidubce.com/v2/app/conversation/runs` | 自动 `remote_session` |
 | `dify` | Dify 平台 | `APIKey`, `BaseURL` | `Model`, `ExtraBody` | `api.dify.ai/v1` | 自动 `remote_session` |
 | `ragflow` | RAGFlow | `APIKey`, `BaseURL`(完整 endpoint，含 `chat_id`) | `ExtraBody` | 无 | 自动 `remote_session` |
@@ -107,7 +108,7 @@ for chunk := range ch { fmt.Print(chunk.Text) }
 **说明**：
 - `BaseURL` 有默认值的 Provider 不传则直连官方 API，传入则切换到自建/代理地址
 - `SessionMode`：`local_history` = SDK 管理历史；`remote_session` = 服务端管理会话。标注"自动"的无需手动指定
-- `bailian_app`/`dify`/`ragflow`/`fastgpt` 的 `Model` 在平台侧配置，SDK 端可不传；`qianfan_app` 的 `Model` 填 app_id
+- `bailian_app`/`dify`/`ragflow`/`fastgpt` 的 `Model` 在平台侧配置，SDK 端可不传；`qianfan_app` 的 `Model` 填 app_id；`coze` 的 `Model` 填 bot_id
 - `generic` 的 `Model` 语义由 `Request` 模板决定，不单独传
 - `ragflow` 需在 `BaseURL` 中直接填写完整 endpoint（`/api/v1/chats_openai/{chat_id}/chat/completions`）；`fastgpt` 可通过 `ExtraBody` 传入 `detail`、`variables`
 
@@ -181,6 +182,42 @@ qs, _ := cli.Quick(client.ProviderConfig{
 ```
 
 详见 [高级主题 - Generic 适配器](docs/ADVANCED.md#generic-适配器)。
+
+## Provider 默认配置参考
+
+以下是各 Provider 的默认 API 地址和推荐模型列表，可直接用于初始化配置：
+
+### 基模
+
+| # | 名称 | SDKProvider | API URL 示例 | 推荐模型 |
+|---|------|-------------|-------------|---------|
+| 1 | OpenAI | `openai` | `https://api.openai.com/v1` | gpt-4.1, gpt-4.1-mini, gpt-4.1-nano, gpt-4o, gpt-4o-mini, o3-mini |
+| 2 | Anthropic | `claude` | `https://api.anthropic.com` | claude-opus-4, claude-sonnet-4, claude-haiku-4 |
+| 3 | Google Gemini | `gemini` | `https://generativelanguage.googleapis.com` | gemini-2.5-pro, gemini-2.5-flash, gemini-2.0-flash, gemini-2.0-flash-lite |
+| 4 | DeepSeek | `deepseek` | `https://api.deepseek.com/v1` | deepseek-chat, deepseek-reasoner |
+| 5 | Moonshot | `moonshot` | `https://api.moonshot.cn/v1` | moonshot-v1-8k, moonshot-v1-32k, moonshot-v1-128k |
+| 6 | 阿里云 DashScope | `dashscope` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | qwen-max, qwen-plus, qwen-turbo, qwen3-235b-a22b, qwen3-30b-a3b |
+| 7 | 火山引擎 | `volcengine` | `https://ark.cn-beijing.volces.com/api/v3` | doubao-pro-4k, doubao-lite-4k, doubao-pro-32k |
+| 8 | 百度千帆 | `qianfan` | `https://qianfan.baidubce.com/v2` | ernie-4.5-8k, ernie-4.0-8k, ernie-3.5-8k, ernie-speed-8k |
+| 9 | Ollama | `ollama` | `http://127.0.0.1:11434` | llama3.1, qwen2.5, deepseek-r1, gemma2, phi3 |
+
+### 应用平台
+
+| # | 名称 | SDKProvider | API URL 示例 | 说明 |
+|---|------|-------------|-------------|------|
+| 10 | Coze 扣子 | `coze` | `https://api.coze.cn/v3` | Model 填 bot_id；国际站用 `api.coze.com`；仅流式 |
+| 11 | 阿里百炼应用 | `bailian_app` | `https://dashscope.aliyuncs.com/api/v2/apps/agent/{APP_ID}/compatible-mode/v1` | Model 可选，平台侧配置 |
+| 12 | 百度千帆应用 | `qianfan_app` | `https://qianfan.baidubce.com/v2/app/conversation/runs` | Model 填 app_id |
+| 13 | Dify | `dify` | `https://api.dify.ai/v1` | Model 在平台侧配置 |
+| 14 | RAGFlow | `ragflow` | `http://{HOST}/api/v1/chats_openai/{CHAT_ID}/chat/completions` | Model 在平台侧配置 |
+| 15 | FastGPT | `fastgpt` | `https://api.fastgpt.in/api/v1/chat/completions` | 需显式指定 SessionMode |
+
+### 通用适配
+
+| # | 名称 | SDKProvider | API URL 示例 | 说明 |
+|---|------|-------------|-------------|------|
+| 16 | 自定义接入 | `generic` | 无（需手动填写） | 贴入 HTTP 报文即可接入 |
+| 17 | OpenAI 兼容 | `openai_compat` | 无（需手动填写） | 兼容 OpenAI 协议的第三方服务 |
 
 ## 更多示例
 

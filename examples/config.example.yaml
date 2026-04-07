@@ -132,6 +132,20 @@ providers:
         team: "demo"
         channel: "examples"
 
+  # Coze 扣子（chat_v3 API，仅流式，remote_session 模式）
+  # Model 字段填 bot_id；conversation_id 由 SDK 自动管理（remote_session）
+  - name: "coze"
+    type: "coze"
+    auth_ref: "coze_key"
+    # 国际站用 https://api.coze.com/v3，默认为国内站 https://api.coze.cn/v3
+    # base_url: "https://api.coze.com/v3"
+    # extra_body:
+    #   user_id: "my-user-id"          # 默认 "sdk-user"
+    #   custom_variables:
+    #     key1: "value1"
+    #   meta_data:
+    #     source: "example"
+
   # RAGFlow (BaseURL must be a full endpoint with chat_id in path)
   - name: "ragflow"
     type: "ragflow"
@@ -207,6 +221,11 @@ credentials:
     provider: "fastgpt"
     auth_type: "api_key"
     api_key: "fastgpt-TOKEN"
+
+  - id: "coze_key"
+    provider: "coze"
+    auth_type: "api_key"
+    api_key: "pat-REPLACE"  # Coze 个人访问令牌（PAT）
 
   - id: "ragflow_key"
     provider: "ragflow"
