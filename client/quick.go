@@ -2,6 +2,8 @@ package client
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"strings"
 	"time"
@@ -114,7 +116,8 @@ func (c *Client) Quick(cfg ProviderConfig) (*QuickSession, error) {
 
 	// 2. Build internal ProviderConfig
 	var pc *config.ProviderConfig
-	var compiledConvMode string // set by generic HTTPSpec compilation path
+	var compiledConvMode string       // set by generic HTTPSpec compilation path
+	var compiledSessionIDField string // non-empty when template has {{session_id}}
 
 	if cfg.Provider == "generic" && strings.TrimSpace(cfg.Request) != "" {
 		// Compile raw HTTP spec into GenericProfile + credentials.
@@ -150,6 +153,7 @@ func (c *Client) Quick(cfg ProviderConfig) (*QuickSession, error) {
 		}
 
 		compiledConvMode = compiled.Profile.Conversation.Mode
+		compiledSessionIDField = compiled.Profile.Request.SessionIDField
 	} else {
 		pc = &config.ProviderConfig{
 			Name:      cfg.Provider,
@@ -226,6 +230,14 @@ func (c *Client) Quick(cfg ProviderConfig) (*QuickSession, error) {
 	}
 
 	sess := c.NewSessionWith(cred, pc, opts...)
+
+	// Auto-generate session ID for remote_session when template has {{session_id}}.
+	// Some APIs (e.g. Qianwen) require a client-provided session_id even on the first round.
+	if sessionMode == "remote_session" && compiledSessionIDField != "" && sess.id == "" {
+		var buf [16]byte
+		_, _ = rand.Read(buf[:])
+		sess.id = hex.EncodeToString(buf[:])
+	}
 
 	return &QuickSession{
 		session: sess,

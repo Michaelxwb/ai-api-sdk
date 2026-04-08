@@ -34,18 +34,17 @@ func renderTemplate(tmpl map[string]any, input string, sessionID string, chainVa
 		tplStr = strings.ReplaceAll(tplStr, "{{input}}", escaped)
 	}
 
-	// {{session_id}}: inject or remove field
+	// {{session_id}}: inject value (empty string on first round, actual ID on subsequent rounds)
 	if strings.Contains(tplStr, "{{session_id}}") {
+		escaped := ""
 		if sessionID != "" {
-			escaped, err := jsonEscapeString(sessionID)
+			var err error
+			escaped, err = jsonEscapeString(sessionID)
 			if err != nil {
 				return "", fmt.Errorf("generic: failed to escape session_id: %w", err)
 			}
-			tplStr = strings.ReplaceAll(tplStr, "{{session_id}}", escaped)
-		} else {
-			// Remove the field containing {{session_id}} placeholder
-			tplStr = removeSessionIDField(tplStr)
 		}
+		tplStr = strings.ReplaceAll(tplStr, "{{session_id}}", escaped)
 	}
 
 	// {{uuid}}: per-request unique identifier

@@ -512,8 +512,8 @@ func detectDeltaPathsByPlaceholder(frames []map[string]any) []string {
 }
 
 // collectPlaceholderPaths 递归遍历 JSON 值，收集所有值为 "$$$" 的字段路径（点分隔）。
-// 当数组只有一个元素时，使用 -1（最后一个元素）代替 0，
-// 因为模板中的单元素数组通常只是示例，实际响应中目标元素可能在不同位置。
+// 当占位符位于数组最后一个元素时，使用 -1（最后一个元素）代替硬编码索引，
+// 因为模板中的数组长度通常只是示例，实际响应中数组大小可能不同。
 func collectPlaceholderPaths(v any, prefix string, seen map[string]struct{}, paths *[]string) {
 	switch val := v.(type) {
 	case map[string]any:
@@ -527,8 +527,8 @@ func collectPlaceholderPaths(v any, prefix string, seen map[string]struct{}, pat
 	case []any:
 		for i, child := range val {
 			idxStr := fmt.Sprintf("%d", i)
-			if len(val) == 1 {
-				idxStr = "-1" // 单元素数组 → "最后一个元素"
+			if i == len(val)-1 {
+				idxStr = "-1" // 最后一个元素 → 用 -1 适配变长数组
 			}
 			var path string
 			if prefix != "" {
@@ -559,7 +559,7 @@ func detectRemoteIDByPlaceholder(frames []map[string]any) string {
 }
 
 // findFirstPlaceholder 递归遍历 JSON 值，返回第一个匹配目标占位符的字段路径。
-// 同 collectPlaceholderPaths，单元素数组使用 -1 索引。
+// 同 collectPlaceholderPaths，数组最后一个元素使用 -1 索引。
 func findFirstPlaceholder(v any, prefix, target string) string {
 	switch val := v.(type) {
 	case map[string]any:
@@ -575,7 +575,7 @@ func findFirstPlaceholder(v any, prefix, target string) string {
 	case []any:
 		for i, child := range val {
 			idxStr := fmt.Sprintf("%d", i)
-			if len(val) == 1 {
+			if i == len(val)-1 {
 				idxStr = "-1"
 			}
 			var path string

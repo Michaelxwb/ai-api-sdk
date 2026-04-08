@@ -2,6 +2,8 @@ package client
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -164,6 +166,15 @@ func (c *Client) NewSessionFromRaw(raw generic.RawIntegrationSpec, opts ...Sessi
 
 	sess := c.NewSessionWith(compiled.Credential, pc, opts...)
 	sess.conversationMode = convMode
+
+	// Auto-generate initial session ID when template has {{session_id}} placeholder
+	// and mode is remote_session. Some APIs (e.g. Qianwen) require a client-provided
+	// session_id even on the first round.
+	if convMode == ConversationModeRemoteSession && compiled.Profile.Request.SessionIDField != "" && sess.id == "" {
+		var buf [16]byte
+		_, _ = rand.Read(buf[:])
+		sess.id = hex.EncodeToString(buf[:])
+	}
 
 	return sess, nil
 }

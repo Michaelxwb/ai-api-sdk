@@ -693,6 +693,42 @@ func TestTC011I_Template_ChainValueEmpty_FieldRemoved(t *testing.T) {
 	}
 }
 
+// TC-011I2: empty sessionID keeps field with empty value (not removed)
+func TestTC011I2_Template_EmptySessionID_FieldKept(t *testing.T) {
+	tmpl := map[string]any{
+		"query":      "{{input}}",
+		"session_id": "{{session_id}}",
+	}
+	result, err := renderTemplateTest(tmpl, "hello", "")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result, `"session_id":""`) {
+		t.Errorf("expected session_id kept as empty string, got: %s", result)
+	}
+	if !isValidJSON(result) {
+		t.Errorf("result is not valid JSON: %s", result)
+	}
+}
+
+// TC-011I3: non-empty sessionID is injected normally
+func TestTC011I3_Template_NonEmptySessionID_Injected(t *testing.T) {
+	tmpl := map[string]any{
+		"query":      "{{input}}",
+		"session_id": "{{session_id}}",
+	}
+	result, err := renderTemplateTest(tmpl, "hello", "sess-abc-123")
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !strings.Contains(result, `"session_id":"sess-abc-123"`) {
+		t.Errorf("expected session_id injected, got: %s", result)
+	}
+	if !isValidJSON(result) {
+		t.Errorf("result is not valid JSON: %s", result)
+	}
+}
+
 // TC-011J: ParseStreamResponse extracts ChainValues from matching event type
 func TestTC011J_ParseStream_ExtractsChainValue_OnMatchingEvent(t *testing.T) {
 	// SSE stream: first a "message" event (not matched), then "message_end" (matched)

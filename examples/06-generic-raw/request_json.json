@@ -10,6 +10,11 @@
           "placeholder": "$$$PARENT_REQ_ID$$$",
           "response_path": "communication.reqid",
           "extract_on_event": ""
+        },
+        {
+          "placeholder": "$$$PARENT_REQ_ID$$$",
+          "response_path": "req_id",
+          "extract_on_event": ""
         }
       ]
     }
@@ -17,15 +22,10 @@
   "local_history": [
     {
       "model": "local_history",
-      "base_url": "https://example.local/api/v1/chat/completions",
-      "request": "POST /api/v1/chat/completions HTTP/1.1\nhost: example.local\nconnection: keep-alive\nauthorization: Bearer <YOUR_LOCAL_BEARER_TOKEN>\ncontent-type: application/json\nX-Request-ID: <YOUR_REQUEST_ID>\n\n{\n  \"model\": \"demo-model\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": [\n        {\n          \"type\": \"text\",\n          \"text\": \"$$$\"\n        }\n      ]\n    },\n    {\n      \"role\": \"assistant\",\n      \"content\": \"\",\n      \"tool_calls\": [\n        {\n          \"id\": \"$$$TOOL_CALL_ID$$$\",\n          \"type\": \"function\",\n          \"function\": {\n            \"name\": \"attempt_completion\",\n            \"arguments\": \"{\\\"result\\\":\\\"$$$\\\"}\"\n          }\n        }\n      ]\n    },\n    {\n      \"role\": \"tool\",\n      \"tool_call_id\": \"$$$TOOL_CALL_ID$$$\",\n      \"content\": \"$$$\"\n    }\n  ],\n  \"stream\": true\n}",
-      "response": "HTTP/1.1 200 OK\nContent-Type: text/event-stream; charset=utf-8\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"$$$\"}}]}\n\ndata: {\"choices\":[{\"index\":0,\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"$$$TOOL_CALL_ID$$$\",\"type\":\"function\",\"function\":{\"arguments\":\"$$$\"}}]}}]}\n\ndata: [DONE]",
+      "base_url": "https://api.deepseek.com/chat/completions",
+      "request": "POST /chat/completions HTTP/1.1\nHost: api.deepseek.com\nAuthorization: Bearer sk-Token\nContent-Type: application/json\nAccept: */*\nConnection: close\nContent-Length: 181\n\n{\n  \"model\": \"deepseek-chat\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"$$$\"\n    }\n  ],\n  \"temperature\": 0.7,\n  \"stream\": true,\n  \"max_tokens\": 1000\n}",
+      "response": "HTTP/1.1 200 OK\nDate: Thu, 08 Jan 2026 10:16:47 GMT\nContent-Type: text/event-stream; charset=utf-8\nConnection: close\nSet-Cookie: HWWAFSESTIME=1767867405859; path=/\nSet-Cookie: HWWAFSESID=2779188a756965b4b2; path=/\ncache-control: no-cache\nvary: origin, access-control-request-method, access-control-request-headers\naccess-control-allow-credentials: true\nx-ds-trace-id: 51285181f25ec88b8c44027d3d293e68\nStrict-Transport-Security: max-age=31536000; includeSubDomains; preload\nX-Content-Type-Options: nosniff\nServer: CW\nContent-Length: 9938\n\ndata: {\"id\":\"873123fe-56ff-4f1e-a501-13efd06fe283\",\"object\":\"chat.completion.chunk\",\"created\":1767867407,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_eaab8d114b_prod0820_fp8_kvcache\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"$$$\"},\"logprobs\":null,\"finish_reason\":null}]}",
       "chain_fields": [
-        {
-          "placeholder": "$$$TOOL_CALL_ID$$$",
-          "response_path": "choices.0.delta.tool_calls.0.id",
-          "extract_on_event": ""
-        }
       ]
     }
   ]
