@@ -90,14 +90,14 @@ for chunk := range ch { fmt.Print(chunk.Text) }
 
 ### 应用层接入
 
-| Provider | 说明 | 必填参数 | 可选参数 | 默认 BaseURL | SessionMode |
-|----------|------|---------|---------|-------------|-------------|
-| `bailian_app` | 阿里百炼应用接入（Responses API） | `APIKey`, `BaseURL` | `Model`, `ExtraBody`, `Path` | 无（需填写应用 Endpoint） | 自动 `local_history` |
-| `coze` | Coze 扣子（仅流式） | `APIKey`, `Model`(bot_id) | `BaseURL`, `ExtraBody`(`user_id`, `custom_variables`等) | `api.coze.cn/v3` | 自动 `remote_session` |
-| `qianfan_app` | 百度千帆应用接入 | `APIKey`, `Model`(app_id) | `BaseURL`, `ExtraBody`(`end_user_id`, `file_ids`等) | `qianfan.baidubce.com/v2/app/conversation/runs` | 自动 `remote_session` |
-| `dify` | Dify 平台 | `APIKey`, `BaseURL` | `Model`, `ExtraBody` | `api.dify.ai/v1` | 自动 `remote_session` |
+| Provider | 说明 | 必填参数                                 | 可选参数 | 默认 BaseURL | SessionMode |
+|----------|------|--------------------------------------|---------|-------------|-------------|
+| `bailian_app` | 阿里百炼应用接入（Responses API） | `APIKey`, `BaseURL`  | `Model`, `ExtraBody`, `Path` | 无（需填写应用 Endpoint） | 自动 `local_history` |
+| `coze` | Coze 扣子（仅流式） | `APIKey`, `Model`(bot_id), `BaseURL` | `ExtraBody`(`user_id`, `custom_variables`等) | `api.coze.cn/v3` | 自动 `remote_session` |
+| `qianfan_app` | 百度千帆应用接入 | `APIKey`, `Model`(app_id), `BaseURL` | `ExtraBody`(`end_user_id`, `file_ids`等) | `qianfan.baidubce.com/v2/app/conversation/runs` | 自动 `remote_session` |
+| `dify` | Dify 平台 | `APIKey`, `BaseURL`  | `Model`, `ExtraBody` | `api.dify.ai/v1` | 自动 `remote_session` |
 | `ragflow` | RAGFlow（自动适配原生/OpenAI 兼容端点） | `APIKey`, `BaseURL`(完整 endpoint，含 `chat_id`) | `Model`, `ExtraBody` | 无 | 自动 `remote_session` |
-| `fastgpt` | FastGPT | `APIKey`, `BaseURL`, `SessionMode` | `ExtraBody` | 无 | 需显式指定 |
+| `fastgpt` | FastGPT | `APIKey`, `BaseURL`, `SessionMode`   | `ExtraBody` | 无 | 需显式指定 |
 
 ### 通用适配
 

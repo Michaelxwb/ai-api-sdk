@@ -357,6 +357,14 @@ func parseHTTPResponseSpec(text string, chainFields []ChainField) (RawResponseSp
 		protocol = "sse"
 	}
 
+	// 非 SSE 场景：若 body 是单个完整 JSON 对象（普通 application/json 响应），
+	// 直接按 "json" 协议解析，从对象中收集占位符路径，跳过按行 SSE 帧扫描。
+	if !isSSE {
+		if spec, ok := tryBuildJSONResponseSpec(bodyLines, chainFields); ok {
+			return spec, nil
+		}
+	}
+
 	// 解析 SSE 帧，同时跟踪 SSE 协议级 event: 头。
 	// 支持两种 data 格式：JSON 对象（Dify 风格）和原始 JSON 字符串（OpenAI 风格）。
 	rawFrames, hasDoneMarker := parseRawSSEFrames(bodyLines)
@@ -594,6 +602,41 @@ func findFirstPlaceholder(v any, prefix, target string) string {
 		}
 	}
 	return ""
+}
+
+// tryBuildJSONResponseSpec 尝试把 bodyLines 作为单个 JSON 对象解析。
+// 成功则返回 "json" 协议的 RawResponseSpec，ok=true；否则 ok=false，由调用方走回退逻辑。
+func tryBuildJSONResponseSpec(bodyLines []string, chainFields []ChainField) (RawResponseSpec, bool) {
+	bodyText := strings.TrimSpace(strings.Join(bodyLines, "\n"))
+	if bodyText == "" {
+		return RawResponseSpec{}, false
+	}
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(bodyText), &obj); err != nil {
+		return RawResponseSpec{}, false
+	}
+
+	seen := make(map[string]struct{})
+	var deltaPaths []string
+	collectPlaceholderPaths(obj, "", seen, &deltaPaths)
+	sort.Strings(deltaPaths)
+
+	var textPath string
+	if len(deltaPaths) > 0 {
+		textPath = deltaPaths[0]
+	}
+
+	remoteIDPath := findFirstPlaceholder(obj, "", "$$$SESSION_ID$$$")
+
+	return RawResponseSpec{
+		TextPath:     textPath,
+		RemoteIDPath: remoteIDPath,
+		Stream: StreamProfile{
+			Protocol:    "json",
+			DeltaPaths:  deltaPaths,
+			ChainFields: chainFields,
+		},
+	}, true
 }
 
 // detectTerminalEvent 从响应帧中推断终止事件类型。

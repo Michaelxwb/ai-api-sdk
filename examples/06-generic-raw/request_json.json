@@ -23,8 +23,16 @@
     {
       "model": "local_history",
       "base_url": "https://api.deepseek.com/chat/completions",
-      "request": "POST /chat/completions HTTP/1.1\nHost: api.deepseek.com\nAuthorization: Bearer sk-Token\nContent-Type: application/json\nAccept: */*\nConnection: close\nContent-Length: 181\n\n{\n  \"model\": \"deepseek-chat\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"$$$\"\n    }\n  ],\n  \"temperature\": 0.7,\n  \"stream\": true,\n  \"max_tokens\": 1000\n}",
+      "request": "POST /chat/completions HTTP/1.1\nHost: api.deepseek.com\nAuthorization: Bearer sk-TOKEN\nContent-Type: application/json\nAccept: */*\nConnection: close\nContent-Length: 181\n\n{\n  \"model\": \"deepseek-chat\",\n  \"messages\": [\n    {\n      \"role\": \"user\",\n      \"content\": \"$$$\"\n    }\n  ],\n  \"temperature\": 0.7,\n  \"stream\": true,\n  \"max_tokens\": 1000\n}",
       "response": "HTTP/1.1 200 OK\nDate: Thu, 08 Jan 2026 10:16:47 GMT\nContent-Type: text/event-stream; charset=utf-8\nConnection: close\nSet-Cookie: HWWAFSESTIME=1767867405859; path=/\nSet-Cookie: HWWAFSESID=2779188a756965b4b2; path=/\ncache-control: no-cache\nvary: origin, access-control-request-method, access-control-request-headers\naccess-control-allow-credentials: true\nx-ds-trace-id: 51285181f25ec88b8c44027d3d293e68\nStrict-Transport-Security: max-age=31536000; includeSubDomains; preload\nX-Content-Type-Options: nosniff\nServer: CW\nContent-Length: 9938\n\ndata: {\"id\":\"873123fe-56ff-4f1e-a501-13efd06fe283\",\"object\":\"chat.completion.chunk\",\"created\":1767867407,\"model\":\"deepseek-chat\",\"system_fingerprint\":\"fp_eaab8d114b_prod0820_fp8_kvcache\",\"choices\":[{\"index\":0,\"delta\":{\"role\":\"assistant\",\"content\":\"$$$\"},\"logprobs\":null,\"finish_reason\":null}]}",
+      "chain_fields": [
+      ]
+    },
+    {
+      "model": "local_history",
+      "base_url": "http://10.6.193.49:8900/v1/chat/completions",
+      "request": "POST /v1/chat/completions HTTP/1.1\nHost: 10.6.193.49:8900\nUser-Agent: curl/7.65.0\nAccept: */*\nContent-Type: application/json\nAuthorization: Bearer sk-TOKEN\nContent-Length: 93\n\n{\n  \"model\": \"Qwen3.5-27B-AWQ\",\n  \"messages\": [{ \"role\": \"user\", \"content\": \"$$$\" }]\n}\n",
+      "response": "HTTP/1.1 200 OK\nContent-Type: application/json\nDate: Tue, 14 Apr 2026 07:52:47 GMT\nServer: istio-envoy\nX-Envoy-Upstream-Service-Time: 1603\nX-New-Api-Version: v0.11.7\nX-Oneapi-Request-Id: 20260414075247970701974l2I6Itny\nContent-Length: 1310\n\n{\n  \"id\": \"chatcmpl-d109f44c-4c2c-4c0d-a4c2-96a71f83efa9\",\n  \"object\": \"chat.completion\",\n  \"created\": 1776153167,\n  \"model\": \"Qwen3.5-27B-AWQ\",\n  \"choices\": [\n    {\n      \"index\": 0,\n      \"message\": {\n        \"role\": \"assistant\",\n        \"content\": \"$$$\",\n        \"refusal\": null,\n        \"annotations\": null,\n        \"audio\": null,\n        \"function_call\": null,\n        \"tool_calls\": [],\n        \"reasoning\": null\n      },\n      \"logprobs\": null,\n      \"finish_reason\": \"stop\",\n      \"stop_reason\": null,\n      \"token_ids\": null\n    }\n  ],\n  \"service_tier\": null,\n  \"system_fingerprint\": null,\n  \"usage\": {\n    \"prompt_tokens\": 13,\n    \"total_tokens\": 117,\n    \"completion_tokens\": 104,\n    \"prompt_tokens_details\": null\n  },\n  \"prompt_logprobs\": null,\n  \"prompt_token_ids\": null,\n  \"kv_transfer_params\": null\n}\n",
       "chain_fields": [
       ]
     }

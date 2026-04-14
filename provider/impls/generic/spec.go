@@ -227,6 +227,9 @@ func (s *GenericSpec) ParseStreamResponse(resp *http.Response) (<-chan streaming
 	case "ndjson":
 		parser := &streaming.NDJSONParser{Config: cfg}
 		inner, err = parser.Parse(ctx, resp, extractor)
+	case "json":
+		parser := &streaming.JSONParser{Config: cfg}
+		inner, err = parser.Parse(ctx, resp, extractor)
 	default: // "sse" or empty defaults to SSE
 		parser := &streaming.SSEParser{Config: cfg}
 		inner, err = parser.Parse(ctx, resp, extractor)

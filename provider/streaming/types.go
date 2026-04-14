@@ -20,4 +20,5 @@ type StreamProtocol string
 const (
 	ProtocolSSE    StreamProtocol = "sse"    // Server-Sent Events
 	ProtocolNDJSON StreamProtocol = "ndjson" // Newline Delimited JSON
+	ProtocolJSON   StreamProtocol = "json"   // 一次性 application/json（非流式）响应
 )
