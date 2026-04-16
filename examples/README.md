@@ -22,6 +22,7 @@ examples/
 │   ├── 02-multi-turn/            # Dify 多轮（conversation_id 自动复用）
 │   ├── 03-platform-integration/  # Dify NewSessionWith 示例
 │   └── 04-connectivity-test/     # Dify 连通性测试
+├── 09-structured-output/         # 结构化输出（ResponseFormat + SystemPrompt）
 ├── plugin-platform/              # 浏览器插件平台服务示例
 ├── config.example.yaml
 └── sessionstore/                 # 辅助实现（保留）
@@ -81,6 +82,13 @@ resp, err := cli.NewSession(
 - 依赖 `examples/plugin-platform` 服务与浏览器插件
 - 需要提供 locators JSON（可从 `plugin-platform` 控制台导出）
 - 支持 `-new`（单轮隔离）与 `-stream`（流式输出）
+
+### 09-structured-output
+- 展示通过 `ResponseFormat` 强制模型输出 JSON 格式。
+- 示例 1：`json_object` 模式（简单 JSON 约束）。
+- 示例 2：`SystemPrompt` 角色设定。
+- 示例 3：`json_object` + `SystemPrompt` 组合（在 prompt 中描述 schema 约束）。
+- 注意：`json_schema` 仅 OpenAI 原生支持，DeepSeek 等兼容平台仅支持 `json_object`。
 
 ### Dify 示例
 - Provider 为 `dify`

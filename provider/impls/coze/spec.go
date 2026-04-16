@@ -29,6 +29,9 @@ func (s *CozeSpec) SupportedAuthTypes() []auth.AuthType {
 }
 
 func (s *CozeSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req base.ChatRequest) (*http.Request, error) {
+	if err := base.ErrResponseFormatUnsupported("coze", req.ResponseFormat); err != nil {
+		return nil, err
+	}
 	baseURL := strings.TrimSpace(opts.BaseURL)
 	if baseURL == "" {
 		baseURL = s.DefaultBaseURL()

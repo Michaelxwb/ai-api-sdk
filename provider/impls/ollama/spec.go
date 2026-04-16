@@ -38,6 +38,18 @@ func (s *OllamaSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, r
 		"messages": req.Messages,
 		"stream":   req.Stream,
 	}
+	if req.ResponseFormat != nil {
+		switch req.ResponseFormat.Type {
+		case "json_object":
+			payload["format"] = "json"
+		case "json_schema":
+			if req.ResponseFormat.JSONSchema != nil {
+				payload["format"] = req.ResponseFormat.JSONSchema.Schema
+			} else {
+				payload["format"] = "json"
+			}
+		}
+	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err

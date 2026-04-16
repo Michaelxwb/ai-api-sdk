@@ -29,6 +29,9 @@ func (s *ClaudeSpec) SupportedAuthTypes() []auth.AuthType {
 }
 
 func (s *ClaudeSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req base.ChatRequest) (*http.Request, error) {
+	if err := base.ErrResponseFormatUnsupported("claude", req.ResponseFormat); err != nil {
+		return nil, err
+	}
 	baseURL := opts.BaseURL
 	if strings.TrimSpace(baseURL) == "" {
 		baseURL = s.DefaultBaseURL()

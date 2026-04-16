@@ -147,6 +147,54 @@ spec, err := generic.ExportToHTTPSpec(inferred, rawMultiRoundSpec)
 
 详见：`docs/internal/design-generic-adapter-integration.md`
 
+## 结构化输出（ResponseFormat）
+
+`ProviderConfig.ResponseFormat` 控制模型的输出格式约束。设置后，该会话的每次 `Send()` 请求都会自动注入 `response_format` 参数。
+
+### 类型定义
+
+```go
+// provider/base/types.go
+type ResponseFormat struct {
+    Type       string           `json:"type"`                  // "text" | "json_object" | "json_schema"
+    JSONSchema *JSONSchemaParam `json:"json_schema,omitempty"` // type="json_schema" 时必填
+}
+
+type JSONSchemaParam struct {
+    Name        string         `json:"name"`
+    Description string         `json:"description,omitempty"`
+    Schema      map[string]any `json:"schema"`
+    Strict      *bool          `json:"strict,omitempty"` // OpenAI 专用：严格模式
+}
+```
+
+### Type 取值
+
+| Type | 说明 | 典型用途 |
+|------|------|---------|
+| `"text"` | 默认文本输出（等同于不设置） | 普通对话 |
+| `"json_object"` | 强制输出合法 JSON | 结构化数据提取、API 响应生成 |
+| `"json_schema"` | 按指定 JSON Schema 输出 | 严格格式约束、代码生成、表单填充 |
+
+### Provider 内部映射
+
+SDK 在各 Provider 实现中自动完成协议转换，调用方无需关心底层差异：
+
+| Provider | 转换逻辑 |
+|----------|---------|
+| **OpenAI 兼容** (openai/deepseek/moonshot/dashscope/volcengine/qianfan) | 原样透传 `response_format` 字段 |
+| **Gemini** | `json_object` → `generationConfig.responseMimeType: "application/json"`；`json_schema` 额外附加 `responseSchema` |
+| **Ollama** | `json_object` → `format: "json"`；`json_schema` → `format: <schema对象>` |
+| **Claude** | 不支持，返回错误 |
+
+### 注意事项
+
+- **DeepSeek 等兼容平台不支持 `json_schema`**：虽然走 OpenAI 兼容协议，但后端未实现该类型，发送会返回 400 错误。跨平台使用时应优先选择 `json_object`。
+- **`json_object` 模式下建议配合 SystemPrompt**：描述期望的 JSON 结构，提升输出一致性。
+- **`json_schema` 的 `Strict` 字段**：仅 OpenAI 支持。设为 `true` 时 OpenAI 保证输出严格匹配 schema（可能增加延迟）。
+- **不支持的 Provider 会明确报错**：Claude、Dify、Coze、FastGPT、RAGFlow、QianfanApp、BailianApp、Generic、Plugin 传入非 `text` 的 ResponseFormat 会返回 `"<provider>: response_format type \"...\" is not supported by this provider"` 错误，不会静默丢弃。
+- **Claude 替代方案**：使用 SystemPrompt 引导 JSON 输出，配合响应解析提取 JSON。
+
 ## 高级 Session 选项
 
 ### 访问底层 Session

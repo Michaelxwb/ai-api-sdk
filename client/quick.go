@@ -43,6 +43,9 @@ type ProviderConfig struct {
 	Headers map[string]string
 	// ExtraBody holds extra fields merged into the request body.
 	ExtraBody map[string]any
+	// ResponseFormat controls the model output format (e.g. json_object, json_schema).
+	// Applied to every Send() call in the session.
+	ResponseFormat *base.ResponseFormat
 
 	// --- Session config (optional, auto-inferred) ---
 
@@ -82,11 +85,12 @@ type ProviderConfig struct {
 
 // QuickSession is a simplified session created via Quick().
 type QuickSession struct {
-	session *Session
-	cred    *auth.Credential
-	pc      *config.ProviderConfig
-	model   string
-	stream  bool
+	session        *Session
+	cred           *auth.Credential
+	pc             *config.ProviderConfig
+	model          string
+	stream         bool
+	responseFormat *base.ResponseFormat
 }
 
 // Quick creates a simplified session from a ProviderConfig.
@@ -240,11 +244,12 @@ func (c *Client) Quick(cfg ProviderConfig) (*QuickSession, error) {
 	}
 
 	return &QuickSession{
-		session: sess,
-		cred:    cred,
-		pc:      pc,
-		model:   cfg.Model,
-		stream:  useStream,
+		session:        sess,
+		cred:           cred,
+		pc:             pc,
+		model:          cfg.Model,
+		stream:         useStream,
+		responseFormat: cfg.ResponseFormat,
 	}, nil
 }
 
@@ -253,8 +258,9 @@ func (c *Client) Quick(cfg ProviderConfig) (*QuickSession, error) {
 // For non-streaming, the channel contains a single element.
 func (qs *QuickSession) Send(ctx context.Context, messages []base.Message) (<-chan streaming.StreamChunk, error) {
 	req := base.ChatRequest{
-		Model:    qs.model,
-		Messages: messages,
+		Model:          qs.model,
+		Messages:       messages,
+		ResponseFormat: qs.responseFormat,
 	}
 
 	if qs.stream {

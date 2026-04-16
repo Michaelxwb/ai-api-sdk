@@ -41,6 +41,9 @@ func (s *BailianAppSpec) SupportedAuthTypes() []auth.AuthType {
 }
 
 func (s *BailianAppSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req base.ChatRequest) (*http.Request, error) {
+	if err := base.ErrResponseFormatUnsupported("bailian_app", req.ResponseFormat); err != nil {
+		return nil, err
+	}
 	baseURL := strings.TrimSpace(opts.BaseURL)
 	if baseURL == "" {
 		baseURL = strings.TrimSpace(s.defaultBaseURL)

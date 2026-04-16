@@ -12,6 +12,8 @@ type Message = base.Message
 type ProviderSpec = base.ProviderSpec
 type ProviderTransportSpec = base.ProviderTransportSpec
 type BuildOptions = base.BuildOptions
+type ResponseFormat = base.ResponseFormat
+type JSONSchemaParam = base.JSONSchemaParam
 
 // Re-export streaming types
 type StreamChunk = streaming.StreamChunk

@@ -48,6 +48,9 @@ func (s *GenericSpec) SupportedAuthTypes() []auth.AuthType {
 
 // BuildRequest constructs an HTTP request from the profile template.
 func (s *GenericSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req base.ChatRequest) (*http.Request, error) {
+	if err := base.ErrResponseFormatUnsupported("generic", req.ResponseFormat); err != nil {
+		return nil, err
+	}
 	baseURL := strings.TrimSpace(opts.BaseURL)
 	path := strings.TrimSpace(opts.Path)
 	if path == "" {

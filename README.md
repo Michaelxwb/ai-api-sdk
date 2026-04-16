@@ -115,7 +115,7 @@ for chunk := range ch { fmt.Print(chunk.Text) }
   - 原生端点：`/api/v1/chats/{chat_id}/completions`（使用 `question` 字段，支持 `session_id`）
 - `fastgpt` 可通过 `ExtraBody` 传入 `detail`、`variables`
 
-**通用可选参数**（所有 Provider 均支持）：`Stream`、`TimeoutSec`、`OnError`、`HistoryMaxMessages`、`HistoryMaxTokens`、`StartNewChat`、`AuthHeaders`、`QueryParams`
+**通用可选参数**（所有 Provider 均支持）：`Stream`、`TimeoutSec`、`OnError`、`HistoryMaxMessages`、`HistoryMaxTokens`、`StartNewChat`、`AuthHeaders`、`QueryParams`、`ResponseFormat`
 
 **连通性测试**：所有 Provider 均支持 `qs.Test(ctx)`，内部复用 `Send()` 主链路（流式模式），默认探测 prompt 为 `"return 1"`。探测会话无状态，不污染业务会话、不写入 Store。
 
@@ -148,6 +148,11 @@ client.ProviderConfig{
 
     // 强制独立会话
     StartNewChat: true,        // 每次调用不带历史
+
+    // 结构化输出（强制 JSON 格式）
+    ResponseFormat: &base.ResponseFormat{
+        Type: "json_object",   // "json_object" 或 "json_schema"
+    },
 }
 ```
 
@@ -234,6 +239,7 @@ qs, _ := cli.Quick(client.ProviderConfig{
 - `04-connectivity-test/` - 连通性测试
 - `06-generic-raw/` - Generic 适配器（RawReasoning → Quick 完整闭环）
 - `dify/`、`07-fastgpt/`、`08-ragflow/` - 特定平台示例
+- `09-structured-output/` - 结构化输出（ResponseFormat + SystemPrompt）
 
 ## 文档
 

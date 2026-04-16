@@ -1,5 +1,16 @@
 package base
 
+import "fmt"
+
+// ErrResponseFormatUnsupported 在 Provider 不支持 ResponseFormat 时由 BuildRequest 返回。
+// 调用方可用 errors.Is 判断。
+func ErrResponseFormatUnsupported(provider string, rf *ResponseFormat) error {
+	if rf == nil || rf.Type == "" || rf.Type == "text" {
+		return nil
+	}
+	return fmt.Errorf("%s: response_format type %q is not supported by this provider", provider, rf.Type)
+}
+
 // Message 是简化的对话消息。
 type Message struct {
 	Role       string `json:"role"`
@@ -8,14 +19,29 @@ type Message struct {
 	ToolCallID string `json:"tool_call_id,omitempty"`
 }
 
+// ResponseFormat 控制模型输出格式。
+type ResponseFormat struct {
+	Type       string           `json:"type"`                  // "text" | "json_object" | "json_schema"
+	JSONSchema *JSONSchemaParam `json:"json_schema,omitempty"` // type="json_schema" 时必填
+}
+
+// JSONSchemaParam 描述 JSON schema 约束。
+type JSONSchemaParam struct {
+	Name        string         `json:"name"`
+	Description string         `json:"description,omitempty"`
+	Schema      map[string]any `json:"schema"`
+	Strict      *bool          `json:"strict,omitempty"`
+}
+
 // ChatRequest 是统一的请求结构。
 type ChatRequest struct {
-	Model        string    `json:"model"`
-	Messages     []Message `json:"messages"`
-	Temperature  *float32  `json:"temperature,omitempty"`
-	MaxTokens    *int      `json:"max_tokens,omitempty"`
-	Stream       bool      `json:"stream,omitempty"` // 是否启用流式模式（若 Provider 支持）
-	StartNewChat bool      `json:"startNewChat,omitempty"`
+	Model          string          `json:"model"`
+	Messages       []Message       `json:"messages"`
+	Temperature    *float32        `json:"temperature,omitempty"`
+	MaxTokens      *int            `json:"max_tokens,omitempty"`
+	ResponseFormat *ResponseFormat `json:"response_format,omitempty"`
+	Stream         bool            `json:"stream,omitempty"` // 是否启用流式模式（若 Provider 支持）
+	StartNewChat   bool            `json:"startNewChat,omitempty"`
 
 	// SessionID 的语义由 ConversationMode 决定：
 	//   - remote_session: 由远端服务分配的会话标识（如 Dify conversation_id），首轮为空，续轮注入

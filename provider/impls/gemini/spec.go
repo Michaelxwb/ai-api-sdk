@@ -58,6 +58,20 @@ func (s *GeminiSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, r
 			"parts": []map[string]string{{"text": strings.Join(systemParts, "\n")}},
 		}
 	}
+	if req.ResponseFormat != nil {
+		switch req.ResponseFormat.Type {
+		case "json_object":
+			payload["generationConfig"] = map[string]any{
+				"responseMimeType": "application/json",
+			}
+		case "json_schema":
+			gc := map[string]any{"responseMimeType": "application/json"}
+			if req.ResponseFormat.JSONSchema != nil {
+				gc["responseSchema"] = req.ResponseFormat.JSONSchema.Schema
+			}
+			payload["generationConfig"] = gc
+		}
+	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err

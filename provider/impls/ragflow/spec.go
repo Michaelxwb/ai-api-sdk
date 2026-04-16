@@ -48,6 +48,9 @@ func (s *RAGFlowSpec) SupportedAuthTypes() []auth.AuthType {
 }
 
 func (s *RAGFlowSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req base.ChatRequest) (*http.Request, error) {
+	if err := base.ErrResponseFormatUnsupported("ragflow", req.ResponseFormat); err != nil {
+		return nil, err
+	}
 	endpoint := strings.TrimSpace(opts.BaseURL)
 	if endpoint == "" {
 		endpoint = s.DefaultBaseURL()

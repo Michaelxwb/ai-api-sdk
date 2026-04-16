@@ -291,6 +291,73 @@ fmt.Printf("延迟: %v\n", result.Latency)
 fmt.Printf("响应: %s\n", result.Response.Text)
 ```
 
+## 场景 8：结构化输出（ResponseFormat）
+
+强制模型以 JSON 格式返回响应，便于程序化解析。通过 `ProviderConfig.ResponseFormat` 设置，会自动应用到该会话的每次 `Send()` 调用。
+
+### json_object 模式（推荐，兼容性最广）
+
+```go
+import (
+    "github.com/Michaelxwb/ai-api-sdk/client"
+    "github.com/Michaelxwb/ai-api-sdk/provider/base"
+    _ "github.com/Michaelxwb/ai-api-sdk/provider"
+)
+
+qs, _ := client.New().Quick(client.ProviderConfig{
+    Provider: "deepseek",
+    APIKey:   "sk-xxx",
+    Model:    "deepseek-chat",
+    ResponseFormat: &base.ResponseFormat{
+        Type: "json_object",
+    },
+})
+
+ch, _ := qs.Send(ctx, []base.Message{
+    {Role: "user", Content: `请以 JSON 返回北京天气，包含 city、temp_celsius、condition 字段。`},
+})
+```
+
+### json_schema 模式（仅 OpenAI / Gemini / Ollama）
+
+提供 JSON Schema 约束，模型严格按 schema 输出：
+
+```go
+qs, _ := client.New().Quick(client.ProviderConfig{
+    Provider: "openai",
+    APIKey:   "sk-xxx",
+    Model:    "gpt-4o",
+    ResponseFormat: &base.ResponseFormat{
+        Type: "json_schema",
+        JSONSchema: &base.JSONSchemaParam{
+            Name:        "weather",
+            Description: "天气信息",
+            Schema: map[string]any{
+                "type": "object",
+                "properties": map[string]any{
+                    "city":      map[string]any{"type": "string"},
+                    "temp":      map[string]any{"type": "number"},
+                    "condition": map[string]any{"type": "string"},
+                },
+                "required": []any{"city", "temp", "condition"},
+            },
+        },
+    },
+})
+```
+
+### 各 Provider 兼容性
+
+| Provider | `json_object` | `json_schema` | 说明 |
+|----------|:---:|:---:|------|
+| OpenAI | ✅ | ✅ | 原生支持，`json_schema` 支持 `strict` 模式 |
+| DeepSeek / Moonshot / DashScope / 火山 / 千帆 | ✅ | ❌ | 仅 `json_object`，`json_schema` 返回 400 |
+| Gemini | ✅ | ✅ | SDK 自动映射为 `responseMimeType` + `responseSchema` |
+| Ollama | ✅ | ✅ | SDK 自动映射为 `format` 字段 |
+| Claude | ❌ | ❌ | 不支持，设置后返回错误 |
+
+> **最佳实践**：跨平台场景优先使用 `json_object` + 在 SystemPrompt 中描述 schema 约束，兼容性最好。`json_schema` 仅在确认目标平台支持时使用。
+
 ## 特定平台示例
 
 ### 百度千帆（文心一言）

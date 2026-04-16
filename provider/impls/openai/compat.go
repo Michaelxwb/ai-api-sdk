@@ -57,6 +57,23 @@ func (s *OpenAICompatSpec) BuildRequest(ctx context.Context, opts base.BuildOpti
 	for k, v := range opts.ExtraBody {
 		payload[k] = v
 	}
+	if req.ResponseFormat != nil {
+		rf := map[string]any{"type": req.ResponseFormat.Type}
+		if req.ResponseFormat.JSONSchema != nil {
+			js := map[string]any{
+				"name":   req.ResponseFormat.JSONSchema.Name,
+				"schema": req.ResponseFormat.JSONSchema.Schema,
+			}
+			if req.ResponseFormat.JSONSchema.Description != "" {
+				js["description"] = req.ResponseFormat.JSONSchema.Description
+			}
+			if req.ResponseFormat.JSONSchema.Strict != nil {
+				js["strict"] = *req.ResponseFormat.JSONSchema.Strict
+			}
+			rf["json_schema"] = js
+		}
+		payload["response_format"] = rf
+	}
 	body, err := json.Marshal(payload)
 	if err != nil {
 		return nil, err

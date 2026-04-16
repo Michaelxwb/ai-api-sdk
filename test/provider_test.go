@@ -949,3 +949,302 @@ func TestQianfanAppSpec_AuthStrategyOverride(t *testing.T) {
 		}
 	})
 }
+
+func boolPtr(v bool) *bool { return &v }
+
+// --- ResponseFormat tests ---
+
+func TestOpenAICompat_ResponseFormat_JSONObject(t *testing.T) {
+	spec := mustGetSpec(t, "openai_compat")
+	req := base.ChatRequest{
+		Model:          "gpt-4o",
+		Messages:       []base.Message{{Role: "user", Content: "hi"}},
+		ResponseFormat: &base.ResponseFormat{Type: "json_object"},
+	}
+	opts := base.BuildOptions{BaseURL: "https://api.example.com/v1"}
+	httpReq, err := spec.BuildRequest(context.Background(), opts, req)
+	if err != nil {
+		t.Fatalf("BuildRequest error: %v", err)
+	}
+	payload := decodeBodyMap(t, httpReq)
+	rf, ok := payload["response_format"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected response_format map, got %T", payload["response_format"])
+	}
+	if rf["type"] != "json_object" {
+		t.Fatalf("unexpected type: %v", rf["type"])
+	}
+	if _, has := rf["json_schema"]; has {
+		t.Fatalf("unexpected json_schema key for json_object type")
+	}
+}
+
+func TestOpenAICompat_ResponseFormat_JSONSchema(t *testing.T) {
+	spec := mustGetSpec(t, "openai_compat")
+	req := base.ChatRequest{
+		Model:    "gpt-4o",
+		Messages: []base.Message{{Role: "user", Content: "hi"}},
+		ResponseFormat: &base.ResponseFormat{
+			Type: "json_schema",
+			JSONSchema: &base.JSONSchemaParam{
+				Name:        "answer",
+				Description: "desc",
+				Schema:      map[string]any{"type": "object"},
+				Strict:      boolPtr(true),
+			},
+		},
+	}
+	opts := base.BuildOptions{BaseURL: "https://api.example.com/v1"}
+	httpReq, err := spec.BuildRequest(context.Background(), opts, req)
+	if err != nil {
+		t.Fatalf("BuildRequest error: %v", err)
+	}
+	payload := decodeBodyMap(t, httpReq)
+	rf, ok := payload["response_format"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected response_format map, got %T", payload["response_format"])
+	}
+	if rf["type"] != "json_schema" {
+		t.Fatalf("unexpected type: %v", rf["type"])
+	}
+	js, ok := rf["json_schema"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected json_schema map, got %T", rf["json_schema"])
+	}
+	if js["name"] != "answer" {
+		t.Fatalf("unexpected name: %v", js["name"])
+	}
+	if js["description"] != "desc" {
+		t.Fatalf("unexpected description: %v", js["description"])
+	}
+	if js["strict"] != true {
+		t.Fatalf("unexpected strict: %v", js["strict"])
+	}
+	schema, ok := js["schema"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected schema map, got %T", js["schema"])
+	}
+	if schema["type"] != "object" {
+		t.Fatalf("unexpected schema type: %v", schema["type"])
+	}
+}
+
+func TestOpenAICompat_ResponseFormat_Nil(t *testing.T) {
+	spec := mustGetSpec(t, "openai_compat")
+	req := base.ChatRequest{
+		Model:    "gpt-4o",
+		Messages: []base.Message{{Role: "user", Content: "hi"}},
+	}
+	opts := base.BuildOptions{BaseURL: "https://api.example.com/v1"}
+	httpReq, err := spec.BuildRequest(context.Background(), opts, req)
+	if err != nil {
+		t.Fatalf("BuildRequest error: %v", err)
+	}
+	payload := decodeBodyMap(t, httpReq)
+	if _, has := payload["response_format"]; has {
+		t.Fatalf("expected no response_format key when nil, got %v", payload["response_format"])
+	}
+}
+
+func TestOpenAICompat_ResponseFormat_Text(t *testing.T) {
+	spec := mustGetSpec(t, "openai_compat")
+	req := base.ChatRequest{
+		Model:          "gpt-4o",
+		Messages:       []base.Message{{Role: "user", Content: "hi"}},
+		ResponseFormat: &base.ResponseFormat{Type: "text"},
+	}
+	opts := base.BuildOptions{BaseURL: "https://api.example.com/v1"}
+	httpReq, err := spec.BuildRequest(context.Background(), opts, req)
+	if err != nil {
+		t.Fatalf("BuildRequest error: %v", err)
+	}
+	payload := decodeBodyMap(t, httpReq)
+	rf, ok := payload["response_format"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected response_format map, got %T", payload["response_format"])
+	}
+	if rf["type"] != "text" {
+		t.Fatalf("unexpected type: %v", rf["type"])
+	}
+}
+
+func TestGemini_ResponseFormat_JSONObject(t *testing.T) {
+	spec := mustGetSpec(t, "gemini")
+	req := base.ChatRequest{
+		Model:          "gemini-1.5",
+		Messages:       []base.Message{{Role: "user", Content: "hi"}},
+		ResponseFormat: &base.ResponseFormat{Type: "json_object"},
+	}
+	opts := base.BuildOptions{BaseURL: "https://api.example.com"}
+	httpReq, err := spec.BuildRequest(context.Background(), opts, req)
+	if err != nil {
+		t.Fatalf("BuildRequest error: %v", err)
+	}
+	payload := decodeBodyMap(t, httpReq)
+	gc, ok := payload["generationConfig"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected generationConfig map, got %T", payload["generationConfig"])
+	}
+	if gc["responseMimeType"] != "application/json" {
+		t.Fatalf("unexpected responseMimeType: %v", gc["responseMimeType"])
+	}
+	if _, has := gc["responseSchema"]; has {
+		t.Fatalf("unexpected responseSchema for json_object type")
+	}
+}
+
+func TestGemini_ResponseFormat_JSONSchema(t *testing.T) {
+	spec := mustGetSpec(t, "gemini")
+	req := base.ChatRequest{
+		Model:    "gemini-1.5",
+		Messages: []base.Message{{Role: "user", Content: "hi"}},
+		ResponseFormat: &base.ResponseFormat{
+			Type: "json_schema",
+			JSONSchema: &base.JSONSchemaParam{
+				Name:   "result",
+				Schema: map[string]any{"type": "object", "properties": map[string]any{"x": map[string]any{"type": "string"}}},
+			},
+		},
+	}
+	opts := base.BuildOptions{BaseURL: "https://api.example.com"}
+	httpReq, err := spec.BuildRequest(context.Background(), opts, req)
+	if err != nil {
+		t.Fatalf("BuildRequest error: %v", err)
+	}
+	payload := decodeBodyMap(t, httpReq)
+	gc, ok := payload["generationConfig"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected generationConfig map, got %T", payload["generationConfig"])
+	}
+	if gc["responseMimeType"] != "application/json" {
+		t.Fatalf("unexpected responseMimeType: %v", gc["responseMimeType"])
+	}
+	schema, ok := gc["responseSchema"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected responseSchema map, got %T", gc["responseSchema"])
+	}
+	if schema["type"] != "object" {
+		t.Fatalf("unexpected schema type: %v", schema["type"])
+	}
+}
+
+func TestGemini_ResponseFormat_Nil(t *testing.T) {
+	spec := mustGetSpec(t, "gemini")
+	req := base.ChatRequest{
+		Model:    "gemini-1.5",
+		Messages: []base.Message{{Role: "user", Content: "hi"}},
+	}
+	opts := base.BuildOptions{BaseURL: "https://api.example.com"}
+	httpReq, err := spec.BuildRequest(context.Background(), opts, req)
+	if err != nil {
+		t.Fatalf("BuildRequest error: %v", err)
+	}
+	payload := decodeBodyMap(t, httpReq)
+	if _, has := payload["generationConfig"]; has {
+		t.Fatalf("expected no generationConfig when ResponseFormat is nil")
+	}
+}
+
+func TestOllama_ResponseFormat_JSONObject(t *testing.T) {
+	spec := mustGetSpec(t, "ollama")
+	req := base.ChatRequest{
+		Model:          "llama3",
+		Messages:       []base.Message{{Role: "user", Content: "hi"}},
+		ResponseFormat: &base.ResponseFormat{Type: "json_object"},
+	}
+	opts := base.BuildOptions{BaseURL: "http://localhost:11434"}
+	httpReq, err := spec.BuildRequest(context.Background(), opts, req)
+	if err != nil {
+		t.Fatalf("BuildRequest error: %v", err)
+	}
+	payload := decodeBodyMap(t, httpReq)
+	if payload["format"] != "json" {
+		t.Fatalf("expected format=json string, got %v (%T)", payload["format"], payload["format"])
+	}
+}
+
+func TestOllama_ResponseFormat_JSONSchema(t *testing.T) {
+	spec := mustGetSpec(t, "ollama")
+	req := base.ChatRequest{
+		Model:    "llama3",
+		Messages: []base.Message{{Role: "user", Content: "hi"}},
+		ResponseFormat: &base.ResponseFormat{
+			Type: "json_schema",
+			JSONSchema: &base.JSONSchemaParam{
+				Name:   "result",
+				Schema: map[string]any{"type": "object"},
+			},
+		},
+	}
+	opts := base.BuildOptions{BaseURL: "http://localhost:11434"}
+	httpReq, err := spec.BuildRequest(context.Background(), opts, req)
+	if err != nil {
+		t.Fatalf("BuildRequest error: %v", err)
+	}
+	payload := decodeBodyMap(t, httpReq)
+	formatMap, ok := payload["format"].(map[string]any)
+	if !ok {
+		t.Fatalf("expected format as map, got %T: %v", payload["format"], payload["format"])
+	}
+	if formatMap["type"] != "object" {
+		t.Fatalf("unexpected schema type: %v", formatMap["type"])
+	}
+}
+
+func TestOllama_ResponseFormat_Nil(t *testing.T) {
+	spec := mustGetSpec(t, "ollama")
+	req := base.ChatRequest{
+		Model:    "llama3",
+		Messages: []base.Message{{Role: "user", Content: "hi"}},
+	}
+	opts := base.BuildOptions{BaseURL: "http://localhost:11434"}
+	httpReq, err := spec.BuildRequest(context.Background(), opts, req)
+	if err != nil {
+		t.Fatalf("BuildRequest error: %v", err)
+	}
+	payload := decodeBodyMap(t, httpReq)
+	if _, has := payload["format"]; has {
+		t.Fatalf("expected no format key when ResponseFormat is nil")
+	}
+}
+
+func TestClaude_ResponseFormat_Rejected(t *testing.T) {
+	spec := mustGetSpec(t, "claude")
+	req := base.ChatRequest{
+		Model:          "claude-3",
+		Messages:       []base.Message{{Role: "user", Content: "hi"}},
+		ResponseFormat: &base.ResponseFormat{Type: "json_object"},
+	}
+	opts := base.BuildOptions{BaseURL: "https://api.anthropic.com"}
+	_, err := spec.BuildRequest(context.Background(), opts, req)
+	if err == nil {
+		t.Fatalf("expected error for unsupported response_format, got nil")
+	}
+}
+
+func TestClaude_ResponseFormat_NilAllowed(t *testing.T) {
+	spec := mustGetSpec(t, "claude")
+	req := base.ChatRequest{
+		Model:    "claude-3",
+		Messages: []base.Message{{Role: "user", Content: "hi"}},
+	}
+	opts := base.BuildOptions{BaseURL: "https://api.anthropic.com"}
+	_, err := spec.BuildRequest(context.Background(), opts, req)
+	if err != nil {
+		t.Fatalf("expected nil ResponseFormat to be allowed, got: %v", err)
+	}
+}
+
+func TestClaude_ResponseFormat_TextAllowed(t *testing.T) {
+	spec := mustGetSpec(t, "claude")
+	req := base.ChatRequest{
+		Model:          "claude-3",
+		Messages:       []base.Message{{Role: "user", Content: "hi"}},
+		ResponseFormat: &base.ResponseFormat{Type: "text"},
+	}
+	opts := base.BuildOptions{BaseURL: "https://api.anthropic.com"}
+	_, err := spec.BuildRequest(context.Background(), opts, req)
+	if err != nil {
+		t.Fatalf("expected text ResponseFormat to be allowed, got: %v", err)
+	}
+}
