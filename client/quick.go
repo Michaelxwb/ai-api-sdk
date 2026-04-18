@@ -96,7 +96,7 @@ type QuickSession struct {
 // Quick creates a simplified session from a ProviderConfig.
 // It handles credential construction, provider config assembly, and conversation mode inference internally.
 // Returns an error if required parameters for the provider are missing.
-func (c *Client) Quick(cfg ProviderConfig) (*QuickSession, error) {
+func (c *Client) Quick(cfg ProviderConfig, extra ...SessionOption) (*QuickSession, error) {
 	// 0. Validate provider config using existing ProviderSpec metadata.
 	spec, ok := base.Get(cfg.Provider)
 	if !ok {
@@ -233,6 +233,7 @@ func (c *Client) Quick(cfg ProviderConfig) (*QuickSession, error) {
 		useStream = *cfg.Stream
 	}
 
+	opts = append(opts, extra...)
 	sess := c.NewSessionWith(cred, pc, opts...)
 
 	// Auto-generate session ID for remote_session when template has {{session_id}}.
