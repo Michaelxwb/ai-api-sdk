@@ -22,7 +22,7 @@ func ResolveConversationMode(provider string) ConversationMode {
 	case "openai", "claude", "gemini", "ollama",
 		"deepseek", "moonshot", "dashscope", "volcengine", "qianfan", "openai_compat", "bailian_app":
 		return ConversationModeLocalHistory
-	case "dify", "ragflow", "qianfan_app", "coze":
+	case "dify", "ragflow", "qianfan_app", "coze", "self_developed":
 		return ConversationModeRemoteSession
 	default: // fastgpt, generic, plugin, etc.
 		return ""
@@ -30,9 +30,13 @@ func ResolveConversationMode(provider string) ConversationMode {
 }
 
 // ResolveDefaultStream returns the default streaming mode for a provider.
-// Currently all registered providers support streaming, so this always returns true.
 func ResolveDefaultStream(provider string) bool {
-	return true
+	switch provider {
+	case "self_developed":
+		return false
+	default:
+		return true
+	}
 }
 
 // OnErrorStrategy defines how multi-turn errors are handled.

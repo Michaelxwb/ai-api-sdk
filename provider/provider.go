@@ -13,4 +13,5 @@ import (
 	_ "github.com/Michaelxwb/ai-api-sdk/provider/impls/plugin"
 	_ "github.com/Michaelxwb/ai-api-sdk/provider/impls/qianfan_app"
 	_ "github.com/Michaelxwb/ai-api-sdk/provider/impls/ragflow"
+	_ "github.com/Michaelxwb/ai-api-sdk/provider/impls/self_developed"
 )
