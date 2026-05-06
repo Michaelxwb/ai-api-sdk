@@ -15,7 +15,6 @@ from cf_core import (
     load_inject_state,
     match_domains,
     match_specs_by_tags,
-    normalize_spec_entry,
     read_matched_specs,
     resolve_compress,
     resolve_session_id,
@@ -61,14 +60,7 @@ def main() -> None:
         effective_mapping = build_effective_mapping(project_root, mapping)
         domains = match_domains(rel_path, effective_mapping)
 
-        # Load state with session isolation (fix #10)
         sid = resolve_session_id(data)
-        state = load_inject_state(project_root)
-        state_sid = state.get("session_id", "")
-        if state_sid != sid:
-            injected_specs = set()
-        else:
-            injected_specs = set(state.get("injected_specs") or [])
 
         # Extract context tags from file path
         context_tags = extract_context_tags(rel_path)
@@ -90,26 +82,18 @@ def main() -> None:
         except (ValueError, TypeError):
             pass
 
-        # Match specs by tags per domain, with fallback (fix #1)
+        # Strict tag-based matching per domain. No bulk-load fallback: when a
+        # Tier 1 spec's tags don't intersect context_tags, the spec is NOT
+        # injected. Tier 0 (_map.md) uses the "*" wildcard so it still reaches
+        # the model as navigation. Re-inject every call (session dedup removed).
         all_matched = []
         for domain in domains:
             domain_cfg = effective_mapping.get(domain) or {}
             specs_config = domain_cfg.get("specs") or []
-            matched, has_tier1_match = match_specs_by_tags(specs_config, context_tags)
-
-            # Fallback: if no tier 1 spec matched by tags, load ALL tier 1 specs
-            if not has_tier1_match:
-                matched = [normalize_spec_entry(e) for e in specs_config if normalize_spec_entry(e).get("path")]
-                debug_log(
-                    f"inject_hook fallback domain={domain} path={rel_path} loaded={len(matched)} reason=no_tag_match",
-                    project_root,
-                )
-
-            # Filter already-injected
-            new_matched = [m for m in matched if m["path"] not in injected_specs]
-            if new_matched:
+            matched, _ = match_specs_by_tags(specs_config, context_tags)
+            if matched:
                 specs = read_matched_specs(
-                    project_root, domain, new_matched, compress=compress_enabled
+                    project_root, domain, matched, compress=compress_enabled
                 )
                 all_matched.extend(specs)
 
@@ -119,6 +103,13 @@ def main() -> None:
         selected = select_specs_tiered(all_matched, l1_budget, map_max)
         if not selected:
             return
+
+        # Load state with session isolation (deferred until after match success)
+        state = load_inject_state(project_root)
+        if state.get("session_id", "") != sid:
+            injected_specs = set()
+        else:
+            injected_specs = set(state.get("injected_specs") or [])
 
         # Update state with newly injected spec paths
         new_injected = injected_specs | {s["path"] for s in selected}
@@ -144,7 +135,7 @@ def main() -> None:
                 "context_tags": sorted(context_tags),
                 "matched_specs": [s["path"] for s in selected],
             }
-        sys.stdout.write(json.dumps(payload))
+        sys.stdout.write(json.dumps(payload, ensure_ascii=False))
     except Exception as exc:
         # Fix #9: log errors to stderr instead of silently swallowing
         _log(f"cf_inject_hook error: {exc}")

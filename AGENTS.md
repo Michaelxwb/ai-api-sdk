@@ -66,3 +66,9 @@ This project uses the code-flow two-tier spec system.
 5. When changes span docs/examples/tests, anchor decisions on backend map and current code structure.
 
 Do not ask users which spec to load; use path + task intent to decide.
+
+## Task Documents (cf-task workflow)
+
+- `.code-flow/specs/shared/` holds PRD/design templates used by `cf-task-prd` and `cf-task-align`
+- Workflow: `cf-task-prd` → `.prd.md` → `cf-task-align <.prd.md>` → `.design.md` → `cf-task-plan <.design.md>` → tasks
+- Templates are read by the skills themselves; you do not need to pre-load them

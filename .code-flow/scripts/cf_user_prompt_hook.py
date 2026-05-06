@@ -28,7 +28,6 @@ from cf_core import (
     match_domains,
     match_specs_by_tags,
     normalize_path,
-    normalize_spec_entry,
     read_matched_specs,
     resolve_compress,
     resolve_session_id,
@@ -38,6 +37,7 @@ from cf_core import (
 
 # Match bare paths, @-prefixed paths, and backtick-quoted paths
 _PATH_RE = re.compile(r'[@`]?([a-zA-Z0-9_.][a-zA-Z0-9_./\-]*\.[a-zA-Z]{1,6})\b')
+_EXT_RE = re.compile(r'\.(py|js|ts|go|rs|java|rb|cs|cpp|c|h)$')
 
 
 def extract_paths_from_prompt(prompt: str) -> list:
@@ -49,7 +49,7 @@ def extract_paths_from_prompt(prompt: str) -> list:
         # Require at least one slash or a meaningful extension to reduce noise
         if candidate in seen:
             continue
-        if '/' in candidate or re.search(r'\.(py|js|ts|go|rs|java|rb|cs|cpp|c|h)$', candidate):
+        if '/' in candidate or _EXT_RE.search(candidate):
             paths.append(candidate)
             seen.add(candidate)
     return paths
@@ -69,7 +69,11 @@ def main() -> None:
         
         # Resolve session_id consistently with PreToolUse hook
         sid = resolve_session_id(data)
-        debug_log(f"user_prompt_hook start session={sid} prompt_len={len(prompt)}", project_root)
+        debug_log(
+            f"user_prompt_hook start session={sid} "
+            f"prompt_len={len(prompt)} prompt_head={prompt[:200]!r}",
+            project_root,
+        )
 
         config = load_config(project_root)
         if not config:
@@ -113,32 +117,18 @@ def main() -> None:
             matched_domains = fallback_domains_for_context(effective_mapping, context_tags)
             debug_log(f"user_prompt_hook fallback_domains={sorted(matched_domains)}", project_root)
 
-        state = load_inject_state(project_root)
-        if state.get("session_id") != sid:
-            injected_specs: set = set()
-        else:
-            injected_specs = set(state.get("injected_specs") or [])
-
+        # Strict tag-based matching per domain. No bulk-load fallback: when a
+        # Tier 1 spec's tags don't intersect (context_tags ∪ prompt_tags), the
+        # spec is NOT injected. Tier 0 (_map.md) uses "*" so navigation still
+        # reaches the model. Re-inject every call (session dedup removed).
         all_matched = []
         for domain in matched_domains:
             domain_cfg = effective_mapping.get(domain) or {}
             specs_config = domain_cfg.get("specs") or []
-            # Pass prompt_tags to match_specs_by_tags for Chinese/English keyword matching
-            matched, has_tier1 = match_specs_by_tags(specs_config, context_tags, prompt_tags)
-            if not has_tier1:
-                # Fallback: load all specs for this domain
-                matched = [
-                    normalize_spec_entry(e) for e in specs_config
-                    if normalize_spec_entry(e).get("path")
-                ]
-                debug_log(
-                    f"user_prompt_hook fallback domain={domain} loaded={len(matched)} reason=no_tag_match",
-                    project_root,
-                )
-            new_matched = [m for m in matched if m["path"] not in injected_specs]
-            if new_matched:
+            matched, _ = match_specs_by_tags(specs_config, context_tags, prompt_tags)
+            if matched:
                 specs = read_matched_specs(
-                    project_root, domain, new_matched, compress=compress_enabled
+                    project_root, domain, matched, compress=compress_enabled
                 )
                 all_matched.extend(specs)
 
@@ -149,6 +139,13 @@ def main() -> None:
         selected = select_specs_tiered(all_matched, l1_budget, map_max)
         if not selected:
             return
+
+        # Load state with session isolation (deferred until after match success)
+        state = load_inject_state(project_root)
+        if state.get("session_id") != sid:
+            injected_specs: set = set()
+        else:
+            injected_specs = set(state.get("injected_specs") or [])
 
         new_injected = injected_specs | {s["path"] for s in selected}
         save_inject_state(project_root, {
@@ -174,7 +171,7 @@ def main() -> None:
                 "matched_specs": [s["path"] for s in selected],
             }
 
-        sys.stdout.write(json.dumps(payload))
+        sys.stdout.write(json.dumps(payload, ensure_ascii=False))
 
     except Exception as exc:
         _log(f"cf_user_prompt_hook error: {exc}")

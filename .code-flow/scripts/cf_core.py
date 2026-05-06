@@ -8,6 +8,9 @@ import sys
 # --- Config cache (fix #3: avoid re-parsing YAML on every hook call) ---
 
 _config_cache: dict = {}
+_spec_domains_cache: dict = {}
+_effective_mapping_cache: dict = {}
+_ext_set_cache: dict = {}
 
 
 def load_config(project_root: str) -> dict:
@@ -49,9 +52,13 @@ def _spec_path_from_entry(entry) -> str:
 
 
 def discover_spec_domains(project_root: str) -> dict:
+    cached = _spec_domains_cache.get(project_root)
+    if cached is not None:
+        return cached
     specs_root = os.path.join(project_root, ".code-flow", "specs")
     discovered = {}
     if not os.path.isdir(specs_root):
+        _spec_domains_cache[project_root] = discovered
         return discovered
 
     for root, _, files in os.walk(specs_root):
@@ -68,15 +75,24 @@ def discover_spec_domains(project_root: str) -> dict:
 
     for domain in discovered:
         discovered[domain] = sorted(set(discovered[domain]))
+    _spec_domains_cache[project_root] = discovered
     return discovered
 
 
 def _default_spec_entry(rel: str) -> dict:
     tier = 0 if rel.endswith("/_map.md") else 1
+    # shared/ 下非 _map.md 的文件是供 cf-task:align / cf-task:prd 命令
+    # 显式 Read 的模板，不是约束规范，禁止通配符自动注入。
+    if rel.startswith("shared/") and not rel.endswith("/_map.md"):
+        return {"path": rel, "tags": [], "tier": tier}
     return {"path": rel, "tags": ["*"], "tier": tier}
 
 
 def build_effective_mapping(project_root: str, mapping: dict) -> dict:
+    cache_key = (project_root, id(mapping))
+    cached = _effective_mapping_cache.get(cache_key)
+    if cached is not None:
+        return cached
     discovered = discover_spec_domains(project_root)
     effective = {}
 
@@ -119,10 +135,18 @@ def build_effective_mapping(project_root: str, mapping: dict) -> dict:
             "specs": normalized_specs,
         }
 
+    _effective_mapping_cache[cache_key] = effective
     return effective
 
 
 def fallback_domains_for_context(mapping: dict, context_tags: set) -> set:
+    """Search space for per-spec tag matching when no path pattern fires.
+
+    Returns domains whose name matches context_tags when possible; otherwise
+    returns every configured domain so that per-spec tag matching downstream
+    can still cherry-pick. The per-spec tags in config.yml remain the real
+    filter — this function only widens the search space, never injects.
+    """
     if not mapping:
         return set()
     by_name = {domain for domain in mapping.keys() if domain.lower() in context_tags}
@@ -140,7 +164,11 @@ def is_code_file(rel_path: str, inject_config: dict) -> bool:
     if ext in (inject_config.get("skip_extensions") or []):
         return False
     code_exts = inject_config.get("code_extensions") or []
-    return ext in code_exts
+    ext_set = _ext_set_cache.get(id(code_exts))
+    if ext_set is None:
+        ext_set = frozenset(code_exts)
+        _ext_set_cache[id(code_exts)] = ext_set
+    return ext in ext_set
 
 
 def match_domains(rel_path: str, mapping: dict) -> list:
@@ -258,7 +286,7 @@ def extract_context_tags(rel_path: str) -> set:
     filename = parts[-1] if parts else ""
     stem = os.path.splitext(filename)[0].lower()
     if stem:
-        words = re.findall(r"[a-z]+", stem.replace("_", " ").replace("-", " "))
+        words = _FILENAME_WORDS_RE.findall(stem.replace("_", " ").replace("-", " "))
         tags.update(words)
         for word in words:
             semantic = _DIR_SEMANTIC_TAGS.get(word)
@@ -305,10 +333,7 @@ _TAG_ALIASES = {
     "state": ["状态"],
 }
 
-# ASCII aliases this short would false-match inside English words
-# ("ui" inside "guide", "db" inside "idb"), so we require word boundaries.
 _SHORT_ASCII_ALIAS_THRESHOLD = 3
-
 
 def _is_short_ascii(token: str) -> bool:
     if len(token) > _SHORT_ASCII_ALIAS_THRESHOLD:
@@ -320,25 +345,43 @@ def _is_short_ascii(token: str) -> bool:
         return False
 
 
+# Precompute (needle, is_short_ascii, compiled_pattern_or_None) at import time
+# so extract_prompt_tags() is a pure lookup loop with zero per-call overhead.
+_PREPARED_ALIASES: list = []
+
+
+def _init_prepared_aliases() -> None:
+    for canonical, aliases in _TAG_ALIASES.items():
+        entries = []
+        for alias in [canonical, *aliases]:
+            needle = alias.lower()
+            if _is_short_ascii(needle):
+                pattern = re.compile(r"\b" + re.escape(needle) + r"\b", re.IGNORECASE)
+                entries.append((needle, True, pattern))
+            else:
+                entries.append((needle, False, None))
+        _PREPARED_ALIASES.append((canonical, entries))
+
+
+_init_prepared_aliases()
+
+
 def extract_prompt_tags(prompt_text) -> set:
     """Scan prompt text for alias hits and return canonical tags.
 
     - Lowercases ASCII (Chinese is unaffected by .lower()).
-    - Short ASCII aliases are matched with word boundaries to avoid false
-      positives like "guide" matching "ui".
+    - Short ASCII aliases matched with word-boundary regex (precompiled at import).
     - Chinese aliases and long English aliases use plain substring match.
     - Silent on empty/non-string input.
     """
     if not isinstance(prompt_text, str) or not prompt_text.strip():
         return set()
     lower = prompt_text.lower()
-    hits = set()
-    for canonical, aliases in _TAG_ALIASES.items():
-        candidates = [canonical, *aliases]
-        for alias in candidates:
-            needle = alias.lower()
-            if _is_short_ascii(needle):
-                if re.search(r"\b" + re.escape(needle) + r"\b", lower):
+    hits: set = set()
+    for canonical, entries in _PREPARED_ALIASES:
+        for needle, is_short, pattern in entries:
+            if is_short:
+                if pattern.search(lower):  # type: ignore[union-attr]
                     hits.add(canonical)
                     break
             else:
@@ -355,7 +398,7 @@ def normalize_spec_entry(entry) -> dict:
     if isinstance(entry, dict):
         return {
             "path": entry.get("path", ""),
-            "tags": entry.get("tags") or ["*"],
+            "tags": entry.get("tags", ["*"]),
             "tier": entry.get("tier", 1),
         }
     return {}
@@ -388,9 +431,11 @@ def match_specs_by_tags(
     return matched, has_tier1_match
 
 
-# --- Lossless spec content compression (injected at Hook-time) ---
-
+_FILENAME_WORDS_RE = re.compile(r"[a-z]+")
 _BULLET_PREFIXES = ("- ", "* ", "+ ")
+_COMPRESS_HTML_RE = re.compile(r"<!--.*?-->", re.DOTALL)
+_COMPRESS_TRAILING_WS_RE = re.compile(r"[ \t]+$", re.MULTILINE)
+_COMPRESS_BLANK_LINES_RE = re.compile(r"\n{3,}")
 
 
 def compress_content(text: str) -> str:
@@ -410,9 +455,9 @@ def compress_content(text: str) -> str:
     if not isinstance(text, str) or not text:
         return text
     try:
-        result = re.sub(r"<!--.*?-->", "", text, flags=re.DOTALL)
-        result = re.sub(r"[ \t]+$", "", result, flags=re.MULTILINE)
-        result = re.sub(r"\n{3,}", "\n\n", result)
+        result = _COMPRESS_HTML_RE.sub("", text)
+        result = _COMPRESS_TRAILING_WS_RE.sub("", result)
+        result = _COMPRESS_BLANK_LINES_RE.sub("\n\n", result)
         lines = result.split("\n")
         out_lines: list = []
         prev_line: str = ""
@@ -581,6 +626,8 @@ def select_specs_tiered(specs: list, budget: int, map_max: int = 400) -> list:
 
 def assemble_context(specs: list, heading: str) -> str:
     parts = [heading]
+    parts.append("以上规范是本次开发的约束条件，生成代码必须遵循。")
+    parts.append("---")
     tier0 = [s for s in specs if s.get("tier", 1) == 0]
     tier1 = [s for s in specs if s.get("tier", 1) != 0]
 
@@ -596,8 +643,6 @@ def assemble_context(specs: list, heading: str) -> str:
             parts.append(f"#### {spec['path']}")
             parts.append(spec["content"])
 
-    parts.append("---")
-    parts.append("以上规范是本次开发的约束条件，生成代码必须遵循。")
     return "\n\n".join(parts)
 
 
