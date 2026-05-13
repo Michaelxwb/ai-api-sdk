@@ -37,16 +37,76 @@ func (s *CozeSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req
 		baseURL = s.DefaultBaseURL()
 	}
 
-	// Extract query from the last user message.
+	// 提取最后一条 user 消息的文本和图片（支持多模态）
 	query := ""
+	var imageParts []base.ContentPart
 	for i := len(req.Messages) - 1; i >= 0; i-- {
 		if strings.EqualFold(req.Messages[i].Role, "user") {
-			query = req.Messages[i].Content
+			// 多模态路径：优先从 Parts 提取
+			if len(req.Messages[i].Parts) > 0 {
+				for _, part := range req.Messages[i].Parts {
+					if part.Type == "text" && part.Text != "" {
+						query = part.Text
+					} else if part.Type == "image_url" {
+						imageParts = append(imageParts, part)
+					}
+				}
+			} else {
+				// 纯文本路径：使用 Content 字段（向后兼容）
+				query = req.Messages[i].Content
+			}
 			break
 		}
 	}
 	if query == "" && len(req.Messages) > 0 {
 		query = req.Messages[len(req.Messages)-1].Content
+	}
+
+	// 构造 additional_messages
+	var contentValue string
+	var contentType string
+
+	// 如果有图片，需要上传并构造 object_string 格式
+	if len(imageParts) > 0 {
+		// 从 Credential 获取 API Key
+		if opts.Credential == nil || opts.Credential.APIKey == "" {
+			return nil, fmt.Errorf("coze: API key required for file upload")
+		}
+		apiKey := opts.Credential.APIKey
+
+		// 上传图片
+		fileIDs, err := uploadImages(ctx, baseURL, apiKey, imageParts)
+		if err != nil {
+			return nil, err
+		}
+
+		// 构造 content JSON 数组
+		// 格式：[{"type":"text","text":"..."},{"type":"image","file_id":"xxx"},...]
+		contentArray := make([]map[string]any, 0, 1+len(fileIDs))
+		if query != "" {
+			contentArray = append(contentArray, map[string]any{
+				"type": "text",
+				"text": query,
+			})
+		}
+		for _, fileID := range fileIDs {
+			contentArray = append(contentArray, map[string]any{
+				"type":    "image",
+				"file_id": fileID,
+			})
+		}
+
+		// 序列化为 JSON 字符串
+		contentBytes, err := json.Marshal(contentArray)
+		if err != nil {
+			return nil, fmt.Errorf("coze: marshal content array failed: %w", err)
+		}
+		contentValue = string(contentBytes)
+		contentType = "object_string"
+	} else {
+		// 纯文本模式
+		contentValue = query
+		contentType = "text"
 	}
 
 	payload := map[string]any{
@@ -56,8 +116,8 @@ func (s *CozeSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req
 			{
 				"role":         "user",
 				"type":         "question",
-				"content":      query,
-				"content_type": "text",
+				"content":      contentValue,
+				"content_type": contentType,
 			},
 		},
 		"stream":            true,

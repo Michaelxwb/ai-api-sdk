@@ -11,12 +11,27 @@ func ErrResponseFormatUnsupported(provider string, rf *ResponseFormat) error {
 	return fmt.Errorf("%s: response_format type %q is not supported by this provider", provider, rf.Type)
 }
 
+// ContentPart 多模态内容块。
+// 用于支持文本、图片、视频、音频等多种内容类型的混排。
+type ContentPart struct {
+	Type     string `json:"type"`                // "text" | "image_url" | "video_url" | "audio_url"
+	Text     string `json:"text,omitempty"`      // Type="text" 时使用
+	Data     string `json:"data,omitempty"`      // Type="image_url" 时：base64 编码数据；Type="video_url"/"audio_url" 时：文件路径
+	MIMEType string `json:"mime_type,omitempty"` // image/png, image/jpeg, image/webp, image/gif, video/mp4, audio/mpeg 等
+}
+
 // Message 是简化的对话消息。
+// 支持两种模式：
+//   - 纯文本模式（向后兼容）：使用 Content 字段，Parts 为空或不设置
+//   - 多模态模式：使用 Parts 字段，支持文本+图片/视频/音频混排
+//
+// 语义规则：len(Parts)==0 使用 Content，len(Parts)>0 使用 Parts（忽略 Content）
 type Message struct {
-	Role       string `json:"role"`
-	Content    string `json:"content"`
-	Name       string `json:"name,omitempty"`
-	ToolCallID string `json:"tool_call_id,omitempty"`
+	Role       string        `json:"role"`
+	Content    string        `json:"content"`         // 纯文本兼容路径
+	Parts      []ContentPart `json:"parts,omitempty"` // 多模态路径（可选）
+	Name       string        `json:"name,omitempty"`
+	ToolCallID string        `json:"tool_call_id,omitempty"`
 }
 
 // ResponseFormat 控制模型输出格式。

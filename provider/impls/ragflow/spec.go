@@ -48,6 +48,17 @@ func (s *RAGFlowSpec) SupportedAuthTypes() []auth.AuthType {
 }
 
 func (s *RAGFlowSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req base.ChatRequest) (*http.Request, error) {
+	// 检测图片输入（RAGFlow 不支持多模态）
+	for _, msg := range req.Messages {
+		if len(msg.Parts) > 0 {
+			for _, part := range msg.Parts {
+				if part.Type == "image_url" {
+					return nil, fmt.Errorf("ragflow: image input not supported, provider only accepts text")
+				}
+			}
+		}
+	}
+
 	if err := base.ErrResponseFormatUnsupported("ragflow", req.ResponseFormat); err != nil {
 		return nil, err
 	}

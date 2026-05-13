@@ -38,6 +38,52 @@ func (s *FastGPTSpec) SupportedAuthTypes() []auth.AuthType {
 	return []auth.AuthType{auth.AuthTypeAPIKey, auth.AuthTypeBearerToken, auth.AuthTypeOAuth, auth.AuthTypeNone}
 }
 
+// convertMessagesToOpenAIFormat 将 SDK 统一的 Messages 转换为 OpenAI 兼容格式（FastGPT 使用相同格式）。
+// 支持多模态内容：当 Message.Parts 非空时，转换为 content 数组格式；
+// 否则使用 Message.Content 保持向后兼容。
+func convertMessagesToOpenAIFormat(messages []base.Message) []map[string]any {
+	result := make([]map[string]any, 0, len(messages))
+	for _, msg := range messages {
+		m := map[string]any{"role": msg.Role}
+
+		// 多模态路径：len(Parts) > 0
+		if len(msg.Parts) > 0 {
+			content := make([]map[string]any, 0, len(msg.Parts))
+			for _, part := range msg.Parts {
+				switch part.Type {
+				case "text":
+					content = append(content, map[string]any{
+						"type": "text",
+						"text": part.Text,
+					})
+				case "image_url":
+					// 拼接 data URI: data:{MIMEType};base64,{Data}
+					dataURI := fmt.Sprintf("data:%s;base64,%s", part.MIMEType, part.Data)
+					content = append(content, map[string]any{
+						"type": "image_url",
+						"image_url": map[string]any{
+							"url": dataURI,
+						},
+					})
+				}
+			}
+			m["content"] = content
+		} else {
+			// 纯文本路径（向后兼容）：使用 Content 字段
+			m["content"] = msg.Content
+		}
+
+		if msg.Name != "" {
+			m["name"] = msg.Name
+		}
+		if msg.ToolCallID != "" {
+			m["tool_call_id"] = msg.ToolCallID
+		}
+		result = append(result, m)
+	}
+	return result
+}
+
 func (s *FastGPTSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req base.ChatRequest) (*http.Request, error) {
 	if err := base.ErrResponseFormatUnsupported("fastgpt", req.ResponseFormat); err != nil {
 		return nil, err
@@ -52,7 +98,7 @@ func (s *FastGPTSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, 
 	}
 
 	payload := map[string]any{
-		"messages": req.Messages,
+		"messages": convertMessagesToOpenAIFormat(req.Messages), // 使用转换后的 messages
 		"stream":   req.Stream,
 	}
 

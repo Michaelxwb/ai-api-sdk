@@ -170,9 +170,34 @@ func toResponsesInput(messages []base.Message) []map[string]any {
 			role = "user"
 		}
 		item := map[string]any{
-			"role":    role,
-			"content": msg.Content,
+			"role": role,
 		}
+
+		// 多模态路径：len(Parts) > 0
+		if len(msg.Parts) > 0 {
+			content := make([]map[string]any, 0, len(msg.Parts))
+			for _, part := range msg.Parts {
+				switch part.Type {
+				case "text":
+					content = append(content, map[string]any{
+						"type": "input_text", // 百炼格式
+						"text": part.Text,
+					})
+				case "image_url":
+					// 拼接 data URI: data:{MIMEType};base64,{Data}
+					dataURI := fmt.Sprintf("data:%s;base64,%s", part.MIMEType, part.Data)
+					content = append(content, map[string]any{
+						"type":      "input_image", // 百炼格式
+						"image_url": dataURI,       // 直接字符串，非嵌套对象
+					})
+				}
+			}
+			item["content"] = content
+		} else {
+			// 纯文本路径（向后兼容）：使用 Content 字段
+			item["content"] = msg.Content
+		}
+
 		if msg.Name != "" {
 			item["name"] = msg.Name
 		}

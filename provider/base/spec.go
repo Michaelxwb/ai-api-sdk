@@ -9,10 +9,11 @@ import (
 
 // BuildOptions carries per-call overrides from ProviderConfig.
 type BuildOptions struct {
-	BaseURL   string            // API base URL
-	Path      string            // override default endpoint path (e.g. "/chat/completions")
-	ExtraBody map[string]any    // extra fields merged into request body
-	Headers   map[string]string // extra headers (injected by client, not by spec)
+	BaseURL    string            // API base URL
+	Path       string            // override default endpoint path (e.g. "/chat/completions")
+	ExtraBody  map[string]any    // extra fields merged into request body
+	Headers    map[string]string // extra headers (injected by client, not by spec)
+	Credential *auth.Credential  // credential for file upload (B-group providers)
 }
 
 // ProviderSpec defines provider behavior.
