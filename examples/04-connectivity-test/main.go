@@ -42,9 +42,9 @@ func testText() {
 
 	qs, err := cli.Quick(client.ProviderConfig{
 		Provider: "openai",
-		APIKey:   "sk-XgRPbziT8T4cOn0GE1cdaEnCEIRkrq1K1NZhbQxFfNFkjKxm",
-		BaseURL:  "http://adaidify.sangfor.com:8900/v1",
-		Model:    "Qwen3.5-27B-AWQ",
+		APIKey:   "sk-token",
+		BaseURL:  "http://xxx/v1",
+		Model:    "xxx",
 	})
 	if err != nil {
 		log.Fatalf("Error: %v", err)
@@ -75,9 +75,9 @@ func testImage() {
 
 	qs, err := cli.Quick(client.ProviderConfig{
 		Provider: "openai",
-		APIKey:   "sk-XgRPbziT8T4cOn0GE1cdaEnCEIRkrq1K1NZhbQxFfNFkjKxm",
-		BaseURL:  "http://adaidify.sangfor.com:8900/v1",
-		Model:    "Qwen3.5-27B-AWQ",
+		APIKey:   "sk-token",
+		BaseURL:  "http://xxx/v1",
+		Model:    "xxx",
 	})
 	if err != nil {
 		log.Fatalf("Error: %v", err)
