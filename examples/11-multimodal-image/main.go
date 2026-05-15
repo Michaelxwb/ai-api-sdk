@@ -55,17 +55,17 @@ func printStream(ch <-chan streaming.StreamChunk) error {
 // getBaseURL 获取供应商的 BaseURL
 func getBaseURL(provider string) string {
 	urls := map[string]string{
-		"openai":      "http://adaidify.sangfor.com:8900/v1",
-		"fastgpt":     "http://adaidify.sangfor.com:3009",
+		"openai":      "<REPLACE_WITH_YOUR_BASE_URL>",
+		"fastgpt":     "<REPLACE_WITH_YOUR_BASE_URL>",
 		"ollama":      "http://127.0.0.1:11434",
-		"bailian_app": "https://dashscope.aliyuncs.com/api/v2/apps/agent/2ff3c4c65f7249ac8fcc8a14af56a615/compatible-mode/v1", // /responses
-		"dify":        "http://adaidify.sangfor.com:5001/v1",
-		"coze":        "https://api.coze.cn/v3",
-		"qianfan_app": "https://qianfan.baidubce.com/v2/app/conversation/runs",
-		"moonshot":    "https://api.moonshot.cn/v1",
-		"ragflow":     "http://adaidify.sangfor.com:8080/api/v1/chats_openai/de3577da2f0e11f18d0f0242c0a8b006/chat/completions",
-		"deepseek":    "https://api.deepseek.com/v1",
-		"generic":     "http://10.6.193.49:8900/v1/chat/completions",
+		"bailian_app": "<REPLACE_WITH_YOUR_BASE_URL>",
+		"dify":        "<REPLACE_WITH_YOUR_BASE_URL>",
+		"coze":        "<REPLACE_WITH_YOUR_BASE_URL>",
+		"qianfan_app": "<REPLACE_WITH_YOUR_BASE_URL>",
+		"moonshot":    "<REPLACE_WITH_YOUR_BASE_URL>",
+		"ragflow":     "<REPLACE_WITH_YOUR_BASE_URL>",
+		"deepseek":    "<REPLACE_WITH_YOUR_BASE_URL>",
+		"generic":     "<REPLACE_WITH_YOUR_BASE_URL>",
 	}
 	return urls[provider]
 }
@@ -73,17 +73,17 @@ func getBaseURL(provider string) string {
 // getModel 获取供应商的默认模型
 func getModel(provider string) string {
 	models := map[string]string{
-		"openai":      "Qwen3.5-27B-AWQ",
-		"fastgpt":     "",                                     // 可以不用模型
-		"ollama":      "llava",                                // Ollama 视觉模型
-		"bailian_app": "",                                     // 需自定义
-		"dify":        "",                                     // Dify 使用 bot_id
-		"coze":        "7626039521360150579",                  // Coze 使用 bot_id
-		"qianfan_app": "a964b230-c9b9-4102-b462-602db59722ef", // Qianfan 使用 app_id
-		"moonshot":    "kimi-k2.6",                            // Moonshot kimi-k2.6
-		"ragflow":     "",                                     // RAGFlow
-		"deepseek":    "deepseek-chat",                        // DeepSeek 纯文本模型
-		"generic":     "",                                     // 需自定义
+		"openai":      "<REPLACE_WITH_YOUR_MODEL>",
+		"fastgpt":     "",                           // 可以不用模型
+		"ollama":      "llava",                      // Ollama 视觉模型
+		"bailian_app": "",                           // 需自定义
+		"dify":        "",                           // Dify 使用 bot_id
+		"coze":        "<REPLACE_WITH_YOUR_BOT_ID>", // Coze 使用 bot_id
+		"qianfan_app": "<REPLACE_WITH_YOUR_APP_ID>", // Qianfan 使用 app_id
+		"moonshot":    "<REPLACE_WITH_YOUR_MODEL>",  // Moonshot kimi-k2.6
+		"ragflow":     "",                           // RAGFlow
+		"deepseek":    "deepseek-chat",              // DeepSeek 纯文本模型
+		"generic":     "",                           // 需自定义
 	}
 	return models[provider]
 }
@@ -91,16 +91,16 @@ func getModel(provider string) string {
 // getAPIKey 获取供应商的 API Key
 func getAPIKey(provider string) string {
 	keys := map[string]string{
-		"openai":      "sk-XgRPbziT8T4cOn0GE1cdaEnCEIRkrq1K1NZhbQxFfNFkjKxm",
-		"fastgpt":     "fastgpt-sTAo8hgTsGqxpdS639i6TLJHgorxiCYZrcGoaaYryUk2BPzdAZFzLA0ZB3bIWGt34",
+		"openai":      "<REPLACE_WITH_YOUR_API_KEY>",
+		"fastgpt":     "<REPLACE_WITH_YOUR_API_KEY>",
 		"ollama":      "", // Ollama 通常不需要 API Key
-		"bailian_app": "sk-3531fe0691e646e292404420619347ae",
-		"dify":        "app-il4HjNuPHjzeov8jgXthgBKK",
-		"coze":        "pat_KCy2dW0WqljQsgS3O6EHpPKGkXIXwd0sXjUKw4mqIEzq6dEGZR6aQZwOUMo4qMgO",
-		"qianfan_app": "bce-v3/ALTAK-zK1VyMatd8iBoAg6LbGE9/d6bcf0c981c34cbaea8e48e4085301569611ae5c",
-		"moonshot":    "sk-zpW5M6pLOAOC9gGQaTcyEiXgMNfHondstDW9QiS2R8i4JIUu",
-		"ragflow":     "ragflow-IyNDZmYzU4MzE4MzExZjE5NTE3MDI0Mm",
-		"deepseek":    "sk-eac084d260b14b39b47e93ae7b02ebcb",
+		"bailian_app": "<REPLACE_WITH_YOUR_API_KEY>",
+		"dify":        "<REPLACE_WITH_YOUR_API_KEY>",
+		"coze":        "<REPLACE_WITH_YOUR_PAT_TOKEN>",
+		"qianfan_app": "<REPLACE_WITH_YOUR_BCE_TOKEN>",
+		"moonshot":    "<REPLACE_WITH_YOUR_API_KEY>",
+		"ragflow":     "<REPLACE_WITH_YOUR_API_KEY>",
+		"deepseek":    "<REPLACE_WITH_YOUR_API_KEY>",
 		"generic":     "",
 	}
 	return keys[provider]
@@ -355,14 +355,14 @@ func main() {
 
 	// 默认测试：OpenAI 多图
 	// A组：base64 内联（多图）
-	//testOpenAIMulti()
+	testOpenAIMulti()
 	//testFastGPTMulti()
 	//testOllamaMulti()
 	//testBailianMulti()
 
 	// B组：文件上传（多图）
 	//testDifyMulti()
-	testCozeMulti()
+	//testCozeMulti()
 	//testQianfanMulti()
 	//testMoonshotMulti()
 
@@ -400,7 +400,7 @@ func main() {
 | Moonshot   | 文件上传      | 外网    | ✓       | 待填 |
 | RAGFlow    | 不支持        | 内网    | ✗      |  仅文本 |
 | DeepSeek   | 不支持        | 外网    | ✗      | 仅文本 |
-| Generic    | 模板模式      | 外网    | ✗      | 不支持多模态 |
+| Generic    | 模板模式      | 内网    | ✗      | 不支持多模态 |
 
 注意：
 - A组供应商使用 Base64 内联方式，将图片编码为 base64 字符串直接嵌入请求
