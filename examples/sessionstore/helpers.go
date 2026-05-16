@@ -2,6 +2,7 @@ package sessionstore
 
 import (
 	"fmt"
+	"reflect"
 	"time"
 
 	"github.com/Michaelxwb/ai-api-sdk/session"
@@ -201,7 +202,7 @@ func isMessagePrefix(prefix, full []session.Message) bool {
 		return false
 	}
 	for i := range prefix {
-		if prefix[i] != full[i] {
+		if !reflect.DeepEqual(prefix[i], full[i]) {
 			return false
 		}
 	}

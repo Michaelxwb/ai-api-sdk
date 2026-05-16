@@ -14,9 +14,10 @@ const defaultTestTimeout = 10 * time.Second
 
 // TestOptions 连通性测试选项
 type TestOptions struct {
-	Model   string        // 必填：要测试的模型名称
-	Timeout time.Duration // 可选：超时时间，默认 10s
-	Prompt  string        // 可选：测试 prompt，默认 "return 1"
+	Model   string            // 必填：要测试的模型名称
+	Timeout time.Duration     // 可选：超时时间，默认 10s
+	Prompt  string            // 可选：测试 prompt，默认 "return 1"
+	Parts   []base.ContentPart // 可选：多模态路径，优先级高于 Prompt
 }
 
 // TestResult 连通性测试结果
@@ -55,7 +56,12 @@ func (c *Client) TestWith(ctx context.Context, cred *auth.Credential, pc *config
 	}
 
 	// 通过 Send() 复用主链路
-	msgs := []base.Message{{Role: "user", Content: optVal.Prompt}}
+	var msgs []base.Message
+	if len(optVal.Parts) > 0 {
+		msgs = []base.Message{{Role: "user", Parts: optVal.Parts}}
+	} else {
+		msgs = []base.Message{{Role: "user", Content: optVal.Prompt}}
+	}
 	start := time.Now()
 	ch, err := probeQS.Send(ctx, msgs)
 	if err != nil {
@@ -108,7 +114,12 @@ func (c *Client) Test(ctx context.Context, providerName string, opt *TestOptions
 		stream:  true,
 	}
 
-	msgs := []base.Message{{Role: "user", Content: optVal.Prompt}}
+	var msgs []base.Message
+	if len(optVal.Parts) > 0 {
+		msgs = []base.Message{{Role: "user", Parts: optVal.Parts}}
+	} else {
+		msgs = []base.Message{{Role: "user", Content: optVal.Prompt}}
+	}
 	start := time.Now()
 	ch, err := probeQS.Send(ctx, msgs)
 	if err != nil {

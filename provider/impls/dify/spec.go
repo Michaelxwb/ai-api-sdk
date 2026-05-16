@@ -37,10 +37,24 @@ func (s *DifySpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req
 		baseURL = s.DefaultBaseURL()
 	}
 
+	// 提取最后一条 user 消息的文本和图片（支持多模态）
 	query := ""
+	var imageParts []base.ContentPart
 	for i := len(req.Messages) - 1; i >= 0; i-- {
 		if strings.EqualFold(req.Messages[i].Role, "user") {
-			query = req.Messages[i].Content
+			// 多模态路径：优先从 Parts 提取
+			if len(req.Messages[i].Parts) > 0 {
+				for _, part := range req.Messages[i].Parts {
+					if part.Type == "text" && part.Text != "" {
+						query = part.Text
+					} else if part.Type == "image_url" {
+						imageParts = append(imageParts, part)
+					}
+				}
+			} else {
+				// 纯文本路径：使用 Content 字段（向后兼容）
+				query = req.Messages[i].Content
+			}
 			break
 		}
 	}
@@ -58,6 +72,36 @@ func (s *DifySpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req
 	if req.Stream {
 		payload["response_mode"] = "streaming"
 	}
+
+	// ========== 新增逻辑：文件上传（仅在有图片时触发） ==========
+	if len(imageParts) > 0 {
+		// 从 Credential 获取 API Key
+		if opts.Credential == nil || opts.Credential.APIKey == "" {
+			return nil, fmt.Errorf("dify: API key required for file upload")
+		}
+		apiKey := opts.Credential.APIKey
+
+		// 上传图片
+		fileIDs, err := uploadImages(ctx, baseURL, apiKey, imageParts)
+		if err != nil {
+			return nil, err
+		}
+
+		// 构造 files 数组
+		if len(fileIDs) > 0 {
+			files := make([]map[string]any, 0, len(fileIDs))
+			for _, fileID := range fileIDs {
+				files = append(files, map[string]any{
+					"type":            "image",
+					"transfer_method": "local_file",
+					"upload_file_id":  fileID,
+				})
+			}
+			payload["files"] = files
+		}
+	}
+
+	// ========== 原有逻辑：会话管理（完全保持不变） ==========
 	// Dify 的 conversation_id 由服务端管理：
 	// 仅当客户端明确拿到会话 ID（从响应中获取）时才传递。
 	// 首次对话不传入，让 Dify 生成新的会话 ID。

@@ -150,6 +150,18 @@ func (s *Session) Chat(ctx context.Context, req base.ChatRequest) (base.ChatResp
 
 	startNewChat := req.StartNewChat || s.startNewChat
 
+	// Validate multimodal content parts if present
+	// 如果 len(Parts)>0，校验多模态内容；len(Parts)==0 时使用 Content（向后兼容）
+	for i, msg := range req.Messages {
+		if len(msg.Parts) > 0 {
+			if err := base.ValidateContentParts(msg.Parts); err != nil {
+				return base.ChatResponse{}, err
+			}
+		}
+		// len(Parts)==0: 使用 Content 字段，保持现有纯文本行为（无需特殊处理）
+		_ = i // 保留索引用于可能的错误提示
+	}
+
 	switch s.conversationMode {
 	case ConversationModeRemoteSession:
 		return s.chatRemoteSession(ctx, req, startNewChat)
@@ -481,6 +493,18 @@ func (s *Session) ChatStream(ctx context.Context, req base.ChatRequest) (<-chan 
 	// should pass a context with their own deadline.
 
 	startNewChat := req.StartNewChat || s.startNewChat
+
+	// Validate multimodal content parts if present
+	// 如果 len(Parts)>0，校验多模态内容；len(Parts)==0 时使用 Content（向后兼容）
+	for i, msg := range req.Messages {
+		if len(msg.Parts) > 0 {
+			if err := base.ValidateContentParts(msg.Parts); err != nil {
+				return nil, err
+			}
+		}
+		// len(Parts)==0: 使用 Content 字段，保持现有纯文本行为（无需特殊处理）
+		_ = i // 保留索引用于可能的错误提示
+	}
 
 	var rawCh <-chan streaming.StreamChunk
 	var err error

@@ -50,10 +50,11 @@ func (c *Client) prepareChatWithRequest(ctx context.Context, cred *auth.Credenti
 	}
 
 	opts := base.BuildOptions{
-		BaseURL:   baseURL,
-		Path:      pc.Path,
-		ExtraBody: pc.ExtraBody,
-		Headers:   pc.Headers,
+		BaseURL:    baseURL,
+		Path:       pc.Path,
+		ExtraBody:  pc.ExtraBody,
+		Headers:    pc.Headers,
+		Credential: cred,
 	}
 	httpReq, err := spec.BuildRequest(ctx, opts, req)
 	if err != nil {

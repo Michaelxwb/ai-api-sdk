@@ -48,6 +48,17 @@ func (s *GenericSpec) SupportedAuthTypes() []auth.AuthType {
 
 // BuildRequest constructs an HTTP request from the profile template.
 func (s *GenericSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req base.ChatRequest) (*http.Request, error) {
+	// 检测图片输入（Generic 模板模式不支持多模态）
+	for _, msg := range req.Messages {
+		if len(msg.Parts) > 0 {
+			for _, part := range msg.Parts {
+				if part.Type == "image_url" {
+					return nil, fmt.Errorf("generic: multimodal content not supported in template mode, use text-only messages")
+				}
+			}
+		}
+	}
+
 	if err := base.ErrResponseFormatUnsupported("generic", req.ResponseFormat); err != nil {
 		return nil, err
 	}

@@ -28,6 +28,46 @@ func (s *OllamaSpec) SupportedAuthTypes() []auth.AuthType {
 	return []auth.AuthType{auth.AuthTypeNone, auth.AuthTypeBearerToken}
 }
 
+// convertMessagesToOllamaFormat 将 SDK 统一的 Messages 转换为 Ollama /api/chat 原生格式。
+// 注意：/api/chat 不是 OpenAI 兼容接口——content 必须是字符串，图片走单独的 images 数组（纯 base64）。
+func convertMessagesToOllamaFormat(messages []base.Message) []map[string]any {
+	result := make([]map[string]any, 0, len(messages))
+	for _, msg := range messages {
+		m := map[string]any{"role": msg.Role}
+
+		// 多模态路径：len(Parts) > 0
+		if len(msg.Parts) > 0 {
+			var textBuf strings.Builder
+			images := make([]string, 0, len(msg.Parts))
+			for _, part := range msg.Parts {
+				switch part.Type {
+				case "text":
+					textBuf.WriteString(part.Text)
+				case "image_url":
+					// Ollama /api/chat 要求纯 base64 字符串，不带 data URI 前缀
+					images = append(images, part.Data)
+				}
+			}
+			m["content"] = textBuf.String()
+			if len(images) > 0 {
+				m["images"] = images
+			}
+		} else {
+			// 纯文本路径（向后兼容）：使用 Content 字段
+			m["content"] = msg.Content
+		}
+
+		if msg.Name != "" {
+			m["name"] = msg.Name
+		}
+		if msg.ToolCallID != "" {
+			m["tool_call_id"] = msg.ToolCallID
+		}
+		result = append(result, m)
+	}
+	return result
+}
+
 func (s *OllamaSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, req base.ChatRequest) (*http.Request, error) {
 	baseURL := opts.BaseURL
 	if strings.TrimSpace(baseURL) == "" {
@@ -35,7 +75,7 @@ func (s *OllamaSpec) BuildRequest(ctx context.Context, opts base.BuildOptions, r
 	}
 	payload := map[string]any{
 		"model":    req.Model,
-		"messages": req.Messages,
+		"messages": convertMessagesToOllamaFormat(req.Messages),
 		"stream":   req.Stream,
 	}
 	if req.ResponseFormat != nil {

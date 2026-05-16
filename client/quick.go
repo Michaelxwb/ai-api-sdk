@@ -290,12 +290,23 @@ func (qs *QuickSession) SendText(ctx context.Context, text string) (<-chan strea
 
 // Test performs a connectivity test against the configured provider.
 // It delegates to Client.TestWith using the saved credential and provider config.
-func (qs *QuickSession) Test(ctx context.Context) (TestResult, error) {
+func (qs *QuickSession) Test(ctx context.Context, opts ...*TestOptions) (TestResult, error) {
 	model := qs.model
 	if model == "" {
 		model = "test"
 	}
-	return qs.session.client.TestWith(ctx, qs.cred, qs.pc, &TestOptions{Model: model})
+
+	testOpts := &TestOptions{Model: model}
+	if len(opts) > 0 && opts[0] != nil {
+		o := opts[0]
+		if o.Timeout > 0 {
+			testOpts.Timeout = o.Timeout
+		}
+		testOpts.Prompt = o.Prompt
+		testOpts.Parts = o.Parts
+	}
+
+	return qs.session.client.TestWith(ctx, qs.cred, qs.pc, testOpts)
 }
 
 // Session returns the underlying Session for advanced use cases.

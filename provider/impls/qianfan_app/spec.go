@@ -51,11 +51,24 @@ func (s *QianfanAppSpec) BuildRequest(ctx context.Context, opts base.BuildOption
 		return nil, fmt.Errorf("qianfan_app: missing BaseURL")
 	}
 
-	// Extract query from the last user message.
+	// 提取最后一条 user 消息的文本和图片（支持多模态）
 	query := ""
+	var imageParts []base.ContentPart
 	for i := len(req.Messages) - 1; i >= 0; i-- {
 		if strings.EqualFold(req.Messages[i].Role, "user") {
-			query = req.Messages[i].Content
+			// 多模态路径：优先从 Parts 提取
+			if len(req.Messages[i].Parts) > 0 {
+				for _, part := range req.Messages[i].Parts {
+					if part.Type == "text" && part.Text != "" {
+						query = part.Text
+					} else if part.Type == "image_url" {
+						imageParts = append(imageParts, part)
+					}
+				}
+			} else {
+				// 纯文本路径：使用 Content 字段（向后兼容）
+				query = req.Messages[i].Content
+			}
 			break
 		}
 	}
@@ -74,9 +87,42 @@ func (s *QianfanAppSpec) BuildRequest(ctx context.Context, opts base.BuildOption
 		payload["app_id"] = appID
 	}
 
+	// 会话 ID 管理（支持图片上传）
+	conversationID := req.SessionID
+
+	// 如果有图片，需要上传并构造 file_ids
+	if len(imageParts) > 0 {
+		// 从 Credential 获取 API Key
+		if opts.Credential == nil || opts.Credential.APIKey == "" {
+			return nil, fmt.Errorf("qianfan_app: API key required for file upload")
+		}
+		apiKey := opts.Credential.APIKey
+
+		// 如果没有会话 ID，先创建会话
+		if conversationID == "" {
+			var err error
+			conversationID, err = createConversation(ctx, baseURL, apiKey, appID)
+			if err != nil {
+				return nil, err
+			}
+		}
+
+		// 上传图片
+		fileIDs, err := uploadImages(ctx, baseURL, apiKey, appID, conversationID, imageParts)
+		if err != nil {
+			return nil, err
+		}
+
+		// 添加 file_ids 到 payload
+		if len(fileIDs) > 0 {
+			payload["file_ids"] = fileIDs
+		}
+
+	}
+
 	// Inject conversation_id for multi-turn (remote_session mode).
-	if req.SessionID != "" {
-		payload["conversation_id"] = req.SessionID
+	if conversationID != "" {
+		payload["conversation_id"] = conversationID
 	}
 
 	for k, v := range opts.ExtraBody {
