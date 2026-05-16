@@ -358,6 +358,163 @@ qs, _ := client.New().Quick(client.ProviderConfig{
 
 > **最佳实践**：跨平台场景优先使用 `json_object` + 在 SystemPrompt 中描述 schema 约束，兼容性最好。`json_schema` 仅在确认目标平台支持时使用。
 
+## 场景 9：多模态图像
+
+SDK 通过 `base.Message.Parts` 统一表达图文混排，按 provider 能力自动选择上传方式。调用方一次编码，SDK 在 spec 层做差异化适配。
+
+### 9.1 数据模型
+
+```go
+type ContentPart struct {
+    Type     string // "text" | "image_url" | "video_url"(预留) | "audio_url"(预留)
+    Text     string // Type=="text" 时使用
+    Data     string // Type=="image_url" 时：base64 编码的图片字节
+    MIMEType string // image/png | image/jpeg | image/webp | image/gif
+}
+
+type Message struct {
+    Role    string
+    Content string        // 纯文本兼容路径
+    Parts   []ContentPart // 多模态路径（与 Content 互斥）
+    // ...
+}
+```
+
+**互斥语义**：`len(Parts)==0` 时走 `Content`（保持旧行为）；`len(Parts)>0` 时走 `Parts`，忽略 `Content`。
+
+### 9.2 Provider 能力三组分类
+
+| 组 | 上传方式 | Provider | 调用方零感知点 |
+|---|---|---|---|
+| A | base64 内联 data URI | `openai` / `openai_compat` / `fastgpt` / `ollama` / `bailian_app` | SDK 自动拼 `data:<mime>;base64,<data>` |
+| B | 先 multipart 上传换 `file_id` | `dify` / `coze` / `qianfan_app` / `moonshot` | SDK 内部并发上传所有图片，再注入 `file_id`/`object_string` |
+| C | 不支持图片 | `generic` / `ragflow` / `deepseek` | `BuildRequest` 入口直接拒绝，错误明确 |
+
+### 9.3 单图最小示例
+
+```go
+package main
+
+import (
+    "context"
+    "encoding/base64"
+    "fmt"
+    "os"
+
+    "github.com/Michaelxwb/ai-api-sdk/client"
+    "github.com/Michaelxwb/ai-api-sdk/provider/base"
+    _ "github.com/Michaelxwb/ai-api-sdk/provider"
+)
+
+func main() {
+    raw, _ := os.ReadFile("photo.png")
+    encoded := base64.StdEncoding.EncodeToString(raw)
+
+    qs, _ := client.New().Quick(client.ProviderConfig{
+        Provider: "openai",
+        APIKey:   "sk-xxx",
+        Model:    "gpt-4o",
+    })
+
+    ch, _ := qs.Send(context.Background(), []base.Message{{
+        Role: "user",
+        Parts: []base.ContentPart{
+            {Type: "text", Text: "请描述这张图片"},
+            {Type: "image_url", Data: encoded, MIMEType: "image/png"},
+        },
+    }})
+    for c := range ch { fmt.Print(c.Text) }
+}
+```
+
+### 9.4 多图 + 多轮对话
+
+A/B 组 Provider 都支持单条消息内多张图（顺序保留）。B 组的多图会被 SDK 并发上传。
+
+```go
+parts := []base.ContentPart{{Type: "text", Text: "请分别描述这些图片"}}
+for _, path := range []string{"a.png", "b.jpg", "c.webp"} {
+    raw, _ := os.ReadFile(path)
+    parts = append(parts, base.ContentPart{
+        Type:     "image_url",
+        Data:     base64.StdEncoding.EncodeToString(raw),
+        MIMEType: "image/" + filepath.Ext(path)[1:],
+    })
+}
+ch, _ := qs.Send(ctx, []base.Message{{Role: "user", Parts: parts}})
+```
+
+多轮对话时，SessionStore 会原样保留每轮 `Parts`（含 base64），续轮自动带回历史图片。**注意**：长会话 + 多图会显著放大 store 体积与上下文长度，必要时通过 `HistoryMaxMessages` 裁剪。
+
+### 9.5 B 组上传的隐式要求
+
+```go
+// B 组（Dify/Coze/Qianfan/Moonshot）需要 APIKey 来发起上传请求
+qs, _ := client.New().Quick(client.ProviderConfig{
+    Provider: "dify",
+    APIKey:   "app-xxx",  // ← 缺失时返回 "dify: API key required for file upload"
+    BaseURL:  "https://api.dify.ai/v1",
+})
+```
+
+`qianfan_app` 在首轮带图时若无 `SessionID`，SDK 会先 `createConversation` 拿 ID 再上传文件；从第二轮起复用从响应中拿回的 `conversation_id`（remote_session 默认行为，无需手动管理）。
+
+### 9.6 多模态连通性探测
+
+`Test()` 支持图像探测，用于验证模型可见性而不污染业务会话：
+
+```go
+import "github.com/Michaelxwb/ai-api-sdk/client"
+
+result, err := qs.Test(ctx, &client.TestOptions{
+    Parts: []base.ContentPart{
+        {Type: "text", Text: "请计算图中公式，仅返回结果"},
+        {Type: "image_url", Data: encoded, MIMEType: "image/png"},
+    },
+    Timeout: 30 * time.Second,
+})
+```
+
+`Parts` 优先级高于 `Prompt`，两者同时提供时 `Prompt` 被忽略。
+
+### 9.7 错误处理
+
+```go
+import (
+    "errors"
+    "github.com/Michaelxwb/ai-api-sdk/provider/base"
+)
+
+_, err := qs.Send(ctx, msgs)
+switch {
+case errors.Is(err, base.ErrEmptyImageData):
+    // image_url 的 Data 为空 —— 数据缺失
+case errors.Is(err, base.ErrUnsupportedImageFormat):
+    // MIME 不在 PNG/JPEG/WEBP/GIF 白名单 —— 数据格式
+case errors.Is(err, base.ErrUnsupportedPartType):
+    // Type 拼错（如 "image" 漏 "_url"）—— 调用方代码 bug
+}
+```
+
+C 组 Provider 直接返回带 provider 前缀的错误，方便日志定位：
+
+```
+generic:  multimodal content not supported in template mode, use text-only messages
+ragflow:  image input not supported, provider only accepts text
+deepseek: vision model not available, only text models supported
+```
+
+### 9.8 约束与注意事项
+
+- **支持格式**：PNG / JPEG / WEBP / GIF（白名单严格校验，大小写不敏感）。BMP / SVG 等被拒。
+- **Data 字段**：必须是 base64 编码后的字符串（不含 `data:` 前缀，SDK 自动拼装）。
+- **预留类型**：`video_url` / `audio_url` 在数据结构上预留，validate 放行但所有 provider 暂未实现，传入会被静默丢弃，**目前请勿使用**。
+- **大图建议**：单图 base64 后超过几 MB 会显著拉长请求时间和上下文 token；如有大尺寸需求，优先用 B 组 provider（文件上传）。
+- **历史持久化**：`Parts` 会写入 SessionStore，多轮多图场景请评估存储成本。
+- **会话模式**：B 组里 `qianfan_app` 必须保持默认 `remote_session`，强行切到 `local_history` 会让 SDK 每轮重新创建会话。
+
+完整可运行的多平台示例见 `examples/11-multimodal-image/`，覆盖 A/B/C 三组的全部 11 个 provider。
+
 ## 特定平台示例
 
 ### 百度千帆（文心一言）

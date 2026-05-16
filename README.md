@@ -8,6 +8,7 @@
 - 🌐 **16+ 平台** - OpenAI、Claude、Gemini、Coze、Dify、FastGPT、RAGFlow 等
 - 💬 **流式优先** - 原生流式支持，实时响应
 - 🔄 **会话管理** - 自动管理多轮对话历史
+- 🖼️ **多模态图像** - 统一 `ContentPart` 模型，A 组 base64 内联 / B 组自动上传，C 组明确拒绝
 - 🔐 **灵活认证** - API Key、Bearer Token、自定义 Header
 - 🔌 **通用适配** - Generic 适配器：贴入原始 HTTP 报文即可接入任意 API
 - 🧠 **自动推理** - `RawReasoning()` 从抓包自动识别协议并生成接入配置
@@ -118,6 +119,69 @@ for chunk := range ch { fmt.Print(chunk.Text) }
 **通用可选参数**（所有 Provider 均支持）：`Stream`、`TimeoutSec`、`OnError`、`HistoryMaxMessages`、`HistoryMaxTokens`、`StartNewChat`、`AuthHeaders`、`QueryParams`、`ResponseFormat`
 
 **连通性测试**：所有 Provider 均支持 `qs.Test(ctx)`，内部复用 `Send()` 主链路（流式模式），默认探测 prompt 为 `"return 1"`。探测会话无状态，不污染业务会话、不写入 Store。
+
+## 多模态图像（Vision）
+
+通过 `base.Message.Parts` 传图，SDK 按 provider 能力自动选择上传方式。**`Content` 与 `Parts` 互斥**：`len(Parts)==0` 走纯文本（向后兼容），`len(Parts)>0` 走多模态。
+
+### Provider 三组分类
+
+| 组 | 上传方式 | 代表 Provider |
+|---|---|---|
+| A | base64 内联（`data:image/*;base64,...`） | `openai` / `openai_compat` / `fastgpt` / `ollama` / `bailian_app` |
+| B | 先上传文件换 `file_id` 再引用 | `dify` / `coze` / `qianfan_app` / `moonshot` |
+| C | 不支持图片，`BuildRequest` 入口明确拒绝 | `generic` / `ragflow` / `deepseek` |
+
+### 最小示例
+
+```go
+import (
+    "encoding/base64"
+    "os"
+
+    "github.com/Michaelxwb/ai-api-sdk/client"
+    "github.com/Michaelxwb/ai-api-sdk/provider/base"
+    _ "github.com/Michaelxwb/ai-api-sdk/provider"
+)
+
+raw, _ := os.ReadFile("photo.png")
+
+qs, _ := client.New().Quick(client.ProviderConfig{
+    Provider: "openai",
+    APIKey:   "sk-xxx",
+    Model:    "gpt-4o",
+})
+
+ch, _ := qs.Send(ctx, []base.Message{{
+    Role: "user",
+    Parts: []base.ContentPart{
+        {Type: "text", Text: "请描述这张图片"},
+        {Type: "image_url", Data: base64.StdEncoding.EncodeToString(raw), MIMEType: "image/png"},
+    },
+}})
+for chunk := range ch { fmt.Print(chunk.Text) }
+```
+
+B 组（Dify/Coze/Qianfan/Moonshot）使用方式完全相同，SDK 内部自动走 multipart 上传换 `file_id`，调用方零感知。
+
+### 连通性探测带图
+
+`qs.Test(ctx, &client.TestOptions{Parts: parts})`：`Parts` 优先级高于 `Prompt`，可用最小图片验证模型可见性，不污染业务会话。
+
+### 错误识别
+
+```go
+import "errors"
+
+switch {
+case errors.Is(err, base.ErrEmptyImageData):          // image_url.Data 为空
+case errors.Is(err, base.ErrUnsupportedImageFormat):  // MIME 非 PNG/JPEG/WEBP/GIF
+case errors.Is(err, base.ErrUnsupportedPartType):     // Type 拼错（如 "image" 漏 "_url"）
+}
+```
+C 组 Provider 直接返回带前缀的错误（如 `ragflow: image input not supported, ...`），无需 sentinel。
+
+> 详细场景、各平台行为差异与边界处理见 [docs/GUIDE.md](docs/GUIDE.md) "场景 9：多模态图像"。
 
 ## 配置选项
 
@@ -240,6 +304,7 @@ qs, _ := cli.Quick(client.ProviderConfig{
 - `06-generic-raw/` - Generic 适配器（RawReasoning → Quick 完整闭环）
 - `dify/`、`07-fastgpt/`、`08-ragflow/` - 特定平台示例
 - `09-structured-output/` - 结构化输出（ResponseFormat + SystemPrompt）
+- `11-multimodal-image/` - 多模态图像（A/B/C 组 provider 一站式示例）
 
 ## 文档
 

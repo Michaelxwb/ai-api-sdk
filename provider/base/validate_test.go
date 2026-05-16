@@ -113,6 +113,34 @@ func TestValidateContentParts(t *testing.T) {
 			parts:   []ContentPart{},
 			wantErr: nil,
 		},
+		{
+			name: "未识别 Type - 拼写错误 image",
+			parts: []ContentPart{
+				{Type: "image", Data: "iVBORw0KGgo...", MIMEType: "image/png"},
+			},
+			wantErr: ErrUnsupportedPartType,
+		},
+		{
+			name: "预留 Type - video_url 占位，validate 放行",
+			parts: []ContentPart{
+				{Type: "video_url", Data: "/tmp/a.mp4"},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "预留 Type - audio_url 占位，validate 放行",
+			parts: []ContentPart{
+				{Type: "audio_url", Data: "/tmp/a.mp3"},
+			},
+			wantErr: nil,
+		},
+		{
+			name: "未识别 Type - 空字符串",
+			parts: []ContentPart{
+				{Type: "", Text: "hi"},
+			},
+			wantErr: ErrUnsupportedPartType,
+		},
 	}
 
 	for _, tt := range tests {

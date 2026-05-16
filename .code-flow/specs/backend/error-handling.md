@@ -20,6 +20,7 @@
 - 禁止在 SDK core 包内记录日志；所有诊断通过 error 返回值传递给调用方。
 - HTTP 非 2xx 响应必须转为带前缀错误，响应体截断至 4KB（`APIError.Body` 已处理）。
 - Sentinel errors 只在调用方需用 `errors.Is()` 做分支时才定义；不要滥用。
+- 不支持图片的 provider（C 组）必须在 `BuildRequest` 入口检测 `len(Parts)>0 && Type=="image_url"`，按自身前缀返回明确错误（不可走 `base.*` 通用 sentinel），便于调用方按 provider 分支：例 `generic: multimodal content not supported in template mode, use text-only messages`、`ragflow: image input not supported, provider only accepts text`、`deepseek: vision model not available, only text models supported`。
 
 ## Patterns
 
@@ -44,6 +45,25 @@ var (
 // 使用方式
 if errors.Is(err, session.ErrSessionNotFound) { /* 创建新 session */ }
 ```
+
+### Sentinel Errors（`provider/base/validate.go`，多模态校验）
+```go
+var (
+    ErrUnsupportedImageFormat = errors.New("client: unsupported image format") // MIME 不在 PNG/JPEG/WEBP/GIF 白名单
+    ErrEmptyImageData         = errors.New("client: empty image data")         // image_url 的 Data 字段为空
+    ErrUnsupportedPartType    = errors.New("client: unsupported part type")    // Type 不在 knownPartTypes 白名单（拼错而非未实现）
+)
+// 调用方按语义分支
+switch {
+case errors.Is(err, base.ErrEmptyImageData):
+    // 用户传了 image_url 但没填 Data → 数据缺失
+case errors.Is(err, base.ErrUnsupportedImageFormat):
+    // MIME 非白名单 → 数据格式问题
+case errors.Is(err, base.ErrUnsupportedPartType):
+    // Type 拼错（如 "image" 漏 "_url"）→ 调用方代码 bug
+}
+```
+注意：`video_url` / `audio_url` 当前为预留占位，validate 放行，不在 `ErrUnsupportedPartType` 范围内。
 
 ### 优雅降级（SessionStore 失败不阻塞主响应）
 ```go

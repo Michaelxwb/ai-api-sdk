@@ -12,18 +12,20 @@ func ErrResponseFormatUnsupported(provider string, rf *ResponseFormat) error {
 }
 
 // ContentPart 多模态内容块。
-// 用于支持文本、图片、视频、音频等多种内容类型的混排。
+// 已实现：text、image_url；预留占位（provider 层尚未实现）：video_url、audio_url。
+// ValidateContentParts 会拒绝未在白名单内的 Type（如拼错 "image" 漏掉 "_url"），
+// 但对预留占位放行，等待后续 provider 接入。
 type ContentPart struct {
-	Type     string `json:"type"`                // "text" | "image_url" | "video_url" | "audio_url"
+	Type     string `json:"type"`                // "text" | "image_url" | "video_url"(预留) | "audio_url"(预留)
 	Text     string `json:"text,omitempty"`      // Type="text" 时使用
-	Data     string `json:"data,omitempty"`      // Type="image_url" 时：base64 编码数据；Type="video_url"/"audio_url" 时：文件路径
-	MIMEType string `json:"mime_type,omitempty"` // image/png, image/jpeg, image/webp, image/gif, video/mp4, audio/mpeg 等
+	Data     string `json:"data,omitempty"`      // Type="image_url" 时：base64 编码数据；预留类型语义待定
+	MIMEType string `json:"mime_type,omitempty"` // image/png, image/jpeg, image/webp, image/gif；预留类型 MIME 待定
 }
 
 // Message 是简化的对话消息。
 // 支持两种模式：
 //   - 纯文本模式（向后兼容）：使用 Content 字段，Parts 为空或不设置
-//   - 多模态模式：使用 Parts 字段，支持文本+图片/视频/音频混排
+//   - 多模态模式：使用 Parts 字段，支持文本+图片混排（视频/音频已预留 Type，provider 未实现）
 //
 // 语义规则：len(Parts)==0 使用 Content，len(Parts)>0 使用 Parts（忽略 Content）
 type Message struct {

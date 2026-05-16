@@ -7,9 +7,11 @@
 - 禁止在核心链路使用 `panic` 处理可恢复错误。
 - 所有执行 I/O 的方法必须将 `context.Context` 作为第一个参数并传递 deadline；无 deadline 时自动包 5min context（流式链路）。
 - 读取 **HTTP 响应体**必须限制大小：成功响应用 `io.LimitReader(4MB)`，错误消息截断至 4KB。注意：读取 SDK 调用方传入的入站请求体（如 `plugin/transport.go` 中）不受此约束。
+- **文件上传**响应体读取限制为 1MB（`io.LimitReader(resp.Body, 1<<20)`）：上传接口通常只返回 `file_id` 等小载荷，与主链路 4MB 区分，防止恶意/异常返回拖垮内存。现有覆盖：`provider/impls/{coze,dify,qianfan_app,openai}/upload.go`。
 - 共享状态必须并发安全：`sync.RWMutex`（读多写少）或 `sync.Mutex`；interface 注释说明并发要求。
 - 可变数据在返回或存储前必须克隆：`Credential.Clone()`、`cloneMessages()`。
 - 自定义 Header/Query 输入必须校验 CRLF 注入（`\r\n` 字符检测）。
+- `base.Message` 含 `Parts []ContentPart` 切片字段，**不可用 `==` / `!=` 直接比较**（编译期就会拒绝）；前缀/相等比较一律用 `reflect.DeepEqual` 或字段级显式比较。现有覆盖：`examples/sessionstore/helpers.go` 的 `isMessagePrefix`。
 
 ## Patterns
 

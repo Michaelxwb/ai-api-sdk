@@ -8,6 +8,8 @@
 - Quick API 与底层 Session API 的语义必须一致：会话模式、超时、错误策略不得相互矛盾。
 - `remote_session`（session_id 注入 provider 侧）与 `local_history`（SDK 本地维护 history）语义必须严格区分。
 - Generic 适配器推断状态（`auto_confirmed` / `pending_confirm` / `failed`）必须稳定向后兼容。
+- 多模态消息双路径互斥：`base.Message.Content` 与 `base.Message.Parts` 不可同时生效。`len(Parts)==0` 走 `Content`（向后兼容纯文本）；`len(Parts)>0` 走 `Parts`，忽略 `Content`。所有 provider 的 `convertMessages*` 必须先判 `len(Parts)` 决定路径，禁止两者拼接。
+- B 组（文件上传）provider 在 `BuildRequest` 中需要 API Key 单独发起上传请求，必须从 `opts.Credential.APIKey` 取；为 nil 或空时必须按 `<name>: API key required for file upload` 报错并提前返回，不得继续构造主请求。
 
 ## Patterns
 
@@ -102,6 +104,28 @@ if ResolveConversationMode(cfg.Provider) == "" && cfg.SessionMode == "" {
 
 ### 模式推断集中化
 默认会话模式推断集中在 `ResolveConversationMode`，避免在多个入口重复散落判断逻辑。
+
+### 多模态 Provider 能力三组分类
+
+新增带视觉能力的 provider 时，先按下表归类，再按对应模式实现：
+
+```
+A 组（base64 内联）：原生接受 data:image/*;base64,...
+  代表：openai / openai_compat / fastgpt / ollama / bailian_app
+  实现：在 convertMessages*() 中将 ContentPart.Data + MIMEType 拼为 data URI；
+        Ollama 例外，content 仍为字符串，base64 走单独 images 数组。
+
+B 组（先上传再引用 file_id）：图片走独立 multipart 上传换 file_id
+  代表：dify / coze / qianfan_app / moonshot
+  实现：provider/impls/<name>/upload.go 提供 uploadImages / uploadSingleImage；
+        BuildRequest 中读取 opts.Credential.APIKey 调用上传，把返回的 file_id
+        组装进 payload（Dify=files[]、Coze=object_string、Qianfan=file_ids、Moonshot=ms://）。
+
+C 组（不支持图片）：协议本身无法承载图片输入
+  代表：generic / ragflow / deepseek
+  实现：BuildRequest 入口遍历 req.Messages，发现 Type=="image_url" 立即按
+        "<name>: <reason>, only text models supported" 形式返回错误，不再继续。
+```
 
 ## Anti-Patterns
 

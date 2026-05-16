@@ -37,6 +37,7 @@ provider/provider.go            → import _ ".../provider/impls/<name>"
 | `config.go` | 配置结构与校验 |
 | `store.go` | 存储 interface + 实现 |
 | `helpers.go` | 共享工具函数 |
+| `upload.go` | （B 组 provider）文件上传：`uploadImages` 并发入口 + `uploadSingleImage` 单张 multipart，可选 `createConversation`；spec.go 在 `BuildRequest` 中调用，主协议链路与上传细节解耦。现有：`provider/impls/{coze,dify,qianfan_app,openai}/upload.go` |
 
 ### 两层 API 设计
 - `client/quick.go`：扁平参数 + 自动模式推断（Quick API，入门友好）
