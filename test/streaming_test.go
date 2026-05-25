@@ -55,6 +55,37 @@ func TestSSEParser_ParseDataAndDone(t *testing.T) {
 	}
 }
 
+func TestSSEParser_ParseNestedDataPrefix(t *testing.T) {
+	payload := "event:message\n" +
+		"data:data:{\"code\":100000,\"data\":{\"dynamic\":{\"answer_citations\":[{\"text\":\"answer\"}]}}}\n\n"
+
+	buf := bytes.NewBufferString(payload)
+	rec := httptest.NewRecorder()
+	resp := &http.Response{
+		StatusCode: rec.Code,
+		Header:     rec.Header(),
+		Body:       io.NopCloser(buf),
+	}
+
+	parser := &streaming.SSEParser{Config: streaming.StreamConfig{}}
+	extractor := streaming.MakeJSONPathExtractor("data.dynamic.answer_citations.0.text", "", "", "")
+	ch, err := parser.Parse(context.Background(), resp, extractor)
+	if err != nil {
+		t.Fatalf("Parse error: %v", err)
+	}
+
+	chunks := collectChunks(ch)
+	if len(chunks) != 1 {
+		t.Fatalf("unexpected chunk count: %d", len(chunks))
+	}
+	if chunks[0].Text != "answer" || chunks[0].Event != "message" || chunks[0].Error != nil {
+		t.Fatalf("unexpected chunk: %+v", chunks[0])
+	}
+	if string(chunks[0].Raw) != `{"code":100000,"data":{"dynamic":{"answer_citations":[{"text":"answer"}]}}}` {
+		t.Fatalf("raw data was not normalized: %q", chunks[0].Raw)
+	}
+}
+
 func TestNDJSONParser_Parse(t *testing.T) {
 	payload := "" +
 		"{\"message\":{\"content\":\"a\"},\"done\":false}\n" +

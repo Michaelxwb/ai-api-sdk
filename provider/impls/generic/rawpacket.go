@@ -294,6 +294,7 @@ func splitHTTPResponseText(text string) (map[string]string, []string, bool) {
 	lines := strings.Split(text, "\n")
 
 	startsWithSSE := false
+	startsWithBody := false
 	for _, l := range lines {
 		trimmed := strings.TrimSpace(l)
 		if trimmed == "" {
@@ -302,11 +303,14 @@ func splitHTTPResponseText(text string) (map[string]string, []string, bool) {
 		if strings.HasPrefix(trimmed, "event:") || strings.HasPrefix(trimmed, "data:") {
 			startsWithSSE = true
 		}
+		if strings.HasPrefix(trimmed, "{") || strings.HasPrefix(trimmed, "[") {
+			startsWithBody = true
+		}
 		break
 	}
 
 	headers := make(map[string]string)
-	inBody := startsWithSSE // 若以 SSE 内容开头，跳过 HTTP 头解析
+	inBody := startsWithSSE || startsWithBody // 若以 body 内容开头，跳过 HTTP 头解析
 	isSSE := startsWithSSE
 	var bodyLines []string
 
@@ -491,12 +495,37 @@ func parseRawSSEFrames(bodyLines []string) ([]rawSSEFrame, bool) {
 			continue
 		}
 		if strings.HasPrefix(trimmed, "data:") {
-			data := strings.TrimSpace(trimmed[5:])
+			data := normalizeRawSSEDataValue(strings.TrimSpace(trimmed[5:]))
 			rawFrames = append(rawFrames, rawSSEFrame{event: curEvent, data: data})
 		}
 	}
 
 	return rawFrames, hasDoneMarker
+}
+
+func normalizeRawSSEDataValue(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if !strings.HasPrefix(trimmed, "data:") {
+		return value
+	}
+
+	nested := strings.TrimSpace(strings.TrimPrefix(trimmed, "data:"))
+	if nested == "" || nested == "[DONE]" || isLikelyRawJSONValue(nested) {
+		return nested
+	}
+	return value
+}
+
+func isLikelyRawJSONValue(value string) bool {
+	if value == "" {
+		return false
+	}
+	switch value[0] {
+	case '{', '[', '"':
+		return true
+	}
+	return value == "true" || value == "false" || value == "null" ||
+		(value[0] >= '0' && value[0] <= '9') || value[0] == '-'
 }
 
 // isTerminalEventName 判断 SSE 事件名称是否表示流结束。

@@ -92,7 +92,7 @@ func (p *SSEParser) processLine(line string, currentEvent *string, dataLines *[]
 		return false
 	}
 	if strings.HasPrefix(trimmed, "data:") {
-		*dataLines = append(*dataLines, sseFieldValue(trimmed, "data:"))
+		*dataLines = append(*dataLines, normalizeSSEDataValue(sseFieldValue(trimmed, "data:")))
 		return false
 	}
 	// Explicitly skip retry: lines per SSE spec
@@ -108,6 +108,31 @@ func sseFieldValue(line, prefix string) string {
 		value = value[1:]
 	}
 	return value
+}
+
+func normalizeSSEDataValue(value string) string {
+	trimmed := strings.TrimSpace(value)
+	if !strings.HasPrefix(trimmed, "data:") {
+		return value
+	}
+
+	nested := strings.TrimSpace(strings.TrimPrefix(trimmed, "data:"))
+	if nested == "" || nested == "[DONE]" || isLikelyJSONValue(nested) {
+		return nested
+	}
+	return value
+}
+
+func isLikelyJSONValue(value string) bool {
+	if value == "" {
+		return false
+	}
+	switch value[0] {
+	case '{', '[', '"':
+		return true
+	}
+	return value == "true" || value == "false" || value == "null" ||
+		(value[0] >= '0' && value[0] <= '9') || value[0] == '-'
 }
 
 func (p *SSEParser) handleEvent(

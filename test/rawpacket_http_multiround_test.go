@@ -269,3 +269,49 @@ func TestParseHTTPMultiRoundSpec_ResponseBodyExtraction(t *testing.T) {
 		})
 	}
 }
+
+func TestParseHTTPMultiRoundSpec_NestedSSEDataPrefixInference(t *testing.T) {
+	spec := generic.RawHTTPMultiRoundSpec{
+		Model:   "remote_session",
+		BaseURL: "https://www.xhyd.cn/api/v1/knowledge/repositories/chat",
+		Rounds: []generic.RawHTTPRound{
+			{
+				Request: "POST /api/v1/knowledge/repositories/chat HTTP/1.1\n" +
+					"Content-Type: application/json\n\n" +
+					`{"question":"$$$","repoIds":["repo-1"],"sessionId":""}`,
+				Response: "HTTP/1.1 200 OK\n" +
+					"Content-Type: text/event-stream;charset=UTF-8\n\n" +
+					"event:message\n" +
+					`data:data:{"code":100000,"data":{"answer":"","dynamic":{"answer_citations":[{"text":"$$$","type":"answer_gen"}]},"session_id":"sess-1"}}` + "\n\n",
+			},
+			{
+				Request: "POST /api/v1/knowledge/repositories/chat HTTP/1.1\n" +
+					"Content-Type: application/json\n\n" +
+					`{"question":"next","repoIds":["repo-1"],"sessionId":"sess-1"}`,
+				Response: "HTTP/1.1 200 OK\n" +
+					"Content-Type: text/event-stream;charset=UTF-8\n\n" +
+					"event:message\n" +
+					`data:data:{"code":100000,"data":{"answer":"","dynamic":{"answer_citations":[{"text":"next answer","type":"answer_gen"}]},"session_id":"sess-1"}}` + "\n\n",
+			},
+		},
+	}
+
+	multi, err := generic.ParseHTTPMultiRoundSpec(spec)
+	if err != nil {
+		t.Fatalf("ParseHTTPMultiRoundSpec failed: %v", err)
+	}
+
+	inferred, err := generic.InferIntegrationByMultiRound(multi)
+	if err != nil {
+		t.Fatalf("InferIntegrationByMultiRound failed: %v", err)
+	}
+
+	gotPaths := inferred.Profile.Response.Stream.DeltaPaths
+	wantPath := "data.dynamic.answer_citations.-1.text"
+	if len(gotPaths) != 1 || gotPaths[0] != wantPath {
+		t.Fatalf("delta paths = %#v, want [%q]", gotPaths, wantPath)
+	}
+	if inferred.Profile.Response.TextPath != wantPath {
+		t.Fatalf("text path = %q, want %q", inferred.Profile.Response.TextPath, wantPath)
+	}
+}
